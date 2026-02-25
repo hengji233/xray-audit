@@ -1,0 +1,49 @@
+name: xray-audit
+
+services:
+  api:
+    image: ${XRAY_AUDIT_IMAGE:-ghcr.io/zcl19/xray-audit:latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AUDIT_API_HOST: 0.0.0.0
+      AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/logs/xray/access.log}
+      AUDIT_ERROR_LOG_PATH: ${AUDIT_ERROR_LOG_PATH:-/logs/xray/error.log}
+    command: ["python", "-m", "xray_audit.run_api"]
+    ports:
+      - "127.0.0.1:${AUDIT_API_PORT:-8088}:${AUDIT_API_PORT:-8088}"
+    volumes:
+      - ${AUDIT_HOST_XRAY_LOG_DIR:-/usr/local/x-ui}:/logs/xray:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,socket; s=socket.create_connection(('127.0.0.1', int(os.environ.get('AUDIT_API_PORT','8088'))), 2); s.close()\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  collector:
+    image: ${XRAY_AUDIT_IMAGE:-ghcr.io/zcl19/xray-audit:latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/logs/xray/access.log}
+      AUDIT_ERROR_LOG_PATH: ${AUDIT_ERROR_LOG_PATH:-/logs/xray/error.log}
+    command: ["python", "-m", "xray_audit.collector_runner"]
+    volumes:
+      - ${AUDIT_HOST_XRAY_LOG_DIR:-/usr/local/x-ui}:/logs/xray:ro
+    healthcheck:
+      test: ["CMD", "python", "/app/docker/collector_healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  ai_summary:
+    image: ${XRAY_AUDIT_IMAGE:-ghcr.io/zcl19/xray-audit:latest}
+    restart: unless-stopped
+    profiles: ["ai"]
+    env_file:
+      - .env
+    command: ["python", "-m", "xray_audit.ai_summary"]

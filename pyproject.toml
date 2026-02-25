@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xray-audit"
+version = "0.1.0"
+description = "Xray access log audit collector and API"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.scripts]
+xray-audit-collector = "xray_audit.collector:run_collector"
+xray-audit-api = "xray_audit.run_api:main"
+xray-audit-initdb = "xray_audit.init_db:main"
+xray-audit-ai-summary = "xray_audit.ai_summary:main"

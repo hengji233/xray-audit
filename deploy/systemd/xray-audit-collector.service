@@ -1,0 +1,23 @@
+[Unit]
+Description=Xray Audit Collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=audituser
+Group=audituser
+WorkingDirectory=/home/audituser/xray_audit
+EnvironmentFile=-/etc/xray-audit.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/audituser/xray_audit/.venv/bin/python -m xray_audit.collector_runner
+Restart=always
+RestartSec=2
+StartLimitIntervalSec=0
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

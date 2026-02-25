@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+web_admin/node_modules
+web_admin/dist
+xray_audit/frontend_dist
+tests/.pytest_cache

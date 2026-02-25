@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xray Audit Dashboard</title>
+  <link rel="stylesheet" href="/dashboard/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Xray Audit Dashboard</h1>
+    <div id="health">loading...</div>
+  </header>
+
+  <section>
+    <h2>Top Domains (5m)</h2>
+    <table id="domains-table">
+      <thead><tr><th>Domain</th><th>Hits</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Active Users (30s)</h2>
+    <table id="users-table">
+      <thead><tr><th>User</th><th>Last Seen (Unix)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Recent Events (10s)</h2>
+    <table id="events-table">
+      <thead>
+      <tr>
+        <th>Time</th>
+        <th>Type</th>
+        <th>User</th>
+        <th>Destination</th>
+        <th>Status</th>
+        <th>Raw</th>
+      </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script src="/dashboard/app.js"></script>
+</body>
+</html>

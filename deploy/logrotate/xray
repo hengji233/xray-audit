@@ -1,0 +1,9 @@
+/var/log/xray/access.log /var/log/xray/error.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

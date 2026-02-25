@@ -1,0 +1,88 @@
+{
+  "memory_version": "1.1.0",
+  "last_updated_at_utc": "2026-02-25T08:00:00Z",
+  "scope": "global_and_node",
+  "global_doc": "docs/HANDOFF_GLOBAL_MEMORY.md",
+  "node_docs": [
+    {
+      "node_id": "node-1",
+      "host": "38.55.*.*",
+      "doc_path": "docs/NODE_PRIMARY_MEMORY.md",
+      "last_verified_at_utc": "2026-02-25T07:50:00Z",
+      "services": {
+        "api": {
+          "process": ".venv/bin/python -m xray_audit.run_api",
+          "listen": "127.0.0.1:8088",
+          "status": "running"
+        },
+        "collector": {
+          "process": ".venv/bin/python -m xray_audit.collector_runner",
+          "status": "running"
+        },
+        "frontend": {
+          "dist_path": "/home/audituser/xray_audit/xray_audit/frontend_dist",
+          "last_asset_hash": "index-*.js"
+        }
+      }
+    }
+  ],
+  "current_capabilities": [
+    "built_in_auth_jwt_cookie",
+    "force_first_login_password_change",
+    "runtime_config_env_plus_db_override",
+    "errors_query_and_summary",
+    "geoip_batch_lookup",
+    "health_with_alert_fields",
+    "prometheus_metrics_endpoint",
+    "error_keyword_fulltext_first_fallback_like",
+    "retention_cleanup_extended_tables",
+    "local_picker_to_utc_query_conversion",
+    "docker_packaging_and_ghcr_release"
+  ],
+  "recent_milestones": [
+    {
+      "date_utc": "2026-02-25",
+      "title": "Standalone release packaging baseline",
+      "impact_scope": ["api", "collector", "frontend", "docs", "ops"],
+      "evidence": [
+        "docker/Dockerfile and docker/docker-compose.yml added",
+        ".github/workflows/ci.yml and release.yml added",
+        "docs/XRAY_LOG_COMPAT.md added"
+      ]
+    },
+    {
+      "date_utc": "2026-02-20",
+      "title": "Monitoring, retention expansion, FULLTEXT optimization",
+      "impact_scope": ["api", "collector", "db", "frontend"],
+      "evidence": [
+        "health includes collector lag and api metrics",
+        "metrics endpoint returns prometheus format",
+        "error fulltext migration applied"
+      ]
+    }
+  ],
+  "critical_endpoints": {
+    "health": {
+      "path": "/api/v1/health",
+      "auth": "required_by_default",
+      "purpose": "runtime state and alerts"
+    },
+    "metrics": {
+      "path": "/api/v1/metrics",
+      "auth": "required_by_default",
+      "purpose": "prometheus-compatible counters and lag metrics"
+    },
+    "auth_login": {
+      "path": "/api/v1/auth/login",
+      "auth": "anonymous_allowed",
+      "purpose": "issue jwt session cookie"
+    }
+  },
+  "known_risks": [
+    "xray logging may drop lines under extreme load",
+    "small root disk can cause redis persistence failures",
+    "collector resilience depends on process manager restart policy",
+    "cloudflare/browser cache can delay frontend index refresh"
+  ],
+  "sensitivity_policy": "partial_masking"
+}

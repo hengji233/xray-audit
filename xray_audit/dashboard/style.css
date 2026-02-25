@@ -1,0 +1,58 @@
+:root {
+  --bg: #0a1220;
+  --card: #0f1f35;
+  --line: #244267;
+  --text: #dbe8ff;
+  --muted: #93adc9;
+  --good: #6ee7b7;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: radial-gradient(circle at top left, #12345a, var(--bg));
+  color: var(--text);
+  font-family: "Segoe UI", "Noto Sans", sans-serif;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+h1, h2 {
+  margin: 0 0 10px 0;
+}
+
+section {
+  margin-top: 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th, td {
+  text-align: left;
+  border-top: 1px solid var(--line);
+  padding: 7px;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  border-top: none;
+}
+
+#health {
+  color: var(--good);
+  font-size: 13px;
+}

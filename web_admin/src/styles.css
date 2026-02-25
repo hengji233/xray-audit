@@ -1,0 +1,82 @@
+:root {
+  --bg-1: #f4f7ff;
+  --bg-2: #eef7f3;
+  --panel-bg: rgba(255, 255, 255, 0.9);
+  --panel-border: rgba(10, 55, 88, 0.12);
+  --text-main: #0e2433;
+  --text-sub: #587182;
+  --accent: #007a5a;
+  --accent-2: #0f547f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text-main);
+  font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+  background: radial-gradient(circle at 20% 10%, var(--bg-2), transparent 50%),
+    radial-gradient(circle at 85% 85%, #e3f1ff, transparent 40%), var(--bg-1);
+}
+
+.page-card {
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+}
+
+.page-title {
+  margin: 0 0 14px 0;
+  font-size: 22px;
+  letter-spacing: 0.2px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric-item {
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.metric-label {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.metric-value {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.section-gap {
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}

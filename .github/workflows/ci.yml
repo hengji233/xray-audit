@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        run: pytest -q
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        working-directory: web_admin
+        run: |
+          npm install
+          npm run build
+
+      - name: Docs sensitivity gate
+        run: |
+          if rg -n "\b[[:alnum:].-]+\.xyz\b" docs; then
+            echo "Production-like domain literal detected in docs."
+            exit 1
+          fi
+          if rg -n "(?i)(api[_-]?key|bot[_-]?token|jwt[_-]?secret)\s*[:=]\s*\S+" docs; then
+            echo "Potential secret assignment detected in docs."
+            exit 1
+          fi
