@@ -13,7 +13,7 @@ jobs:
   docker_release:
     runs-on: ubuntu-latest
     env:
-      IMAGE_NAME: ghcr.io/zcl19/xray-audit
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
