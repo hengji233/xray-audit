@@ -1,0 +1,4 @@
+2026/02/20 12:00:00.000001 from 10.0.0.2:52341 accepted tcp:example.com:443 [socks-in -> direct] email: alice@example.com
+2026/02/20 12:00:00.100001 from 10.0.0.2:52342 rejected tcp:1.1.1.1:443 [api -> block] policy denied email: bob@example.com
+2026/02/20 12:00:00.200001 from 43.135.1.2:443 accepted tcp:updates.example.net:443 [vless-in -> direct]
+2026/02/20 12:00:00.300001 this is not an access or dns record
