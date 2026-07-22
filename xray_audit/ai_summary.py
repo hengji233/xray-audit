@@ -9,7 +9,7 @@ import httpx
 
 from .config import Settings
 from .runtime_config import RuntimeConfigManager
-from .storage import AuditQueryService
+from .storage_factory import create_query_service
 
 _STATE_KEY = "ai_error_summary_last_ts"
 
@@ -17,7 +17,7 @@ _STATE_KEY = "ai_error_summary_last_ts"
 class ErrorSummaryWorker:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.query = AuditQueryService(settings)
+        self.query = create_query_service(settings)
         self.runtime = RuntimeConfigManager(settings, self.query)
 
     def run_once(self) -> bool:

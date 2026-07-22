@@ -205,6 +205,8 @@ def test_health_contains_monitor_fields() -> None:
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
     body = resp.json()
+    assert body["storage_backend"] == "mysql"
+    assert "storage_state" in body
     assert "collector_lag_seconds" in body
     assert "api_metrics" in body
     assert "alerts" in body

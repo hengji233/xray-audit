@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Build frontend
         working-directory: web_admin
@@ -36,13 +36,24 @@ jobs:
           npm install
           npm run build
 
+      - name: Install D1 gateway dependencies
+        working-directory: cloudflare_worker
+        run: npm ci
+
+      - name: Check D1 gateway
+        working-directory: cloudflare_worker
+        run: |
+          npm run typecheck
+          npm test
+          npx wrangler d1 migrations apply xray-audit-ci --local --config wrangler.ci.jsonc
+
       - name: Docs sensitivity gate
         run: |
           if rg -n "\b[[:alnum:].-]+\.xyz\b" docs; then
             echo "Production-like domain literal detected in docs."
             exit 1
           fi
-          if rg -n "(?i)(api[_-]?key|bot[_-]?token|jwt[_-]?secret)\s*[:=]\s*\S+" docs; then
+          if rg -n "(?i)(api[_-]?key|bot[_-]?token|jwt[_-]?secret|gateway[_-]?token)\s*[:=]\s*\S+" docs; then
             echo "Potential secret assignment detected in docs."
             exit 1
           fi

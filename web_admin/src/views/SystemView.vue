@@ -16,6 +16,10 @@
           <div class="metric-value" style="font-size: 20px">{{ data?.collector_embedded ? "Yes" : "No" }}</div>
         </div>
         <div class="metric-item">
+          <div class="metric-label">Storage</div>
+          <div class="metric-value" style="font-size: 20px">{{ data?.storage_backend?.toUpperCase() || "-" }}</div>
+        </div>
+        <div class="metric-item">
           <div class="metric-label">Now</div>
           <div class="metric-value" style="font-size: 20px">
             {{ data?.now ? formatDateTime(data.now, ui.useUtc) : "-" }}

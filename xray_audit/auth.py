@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Protocol
 
 import bcrypt
 import jwt
@@ -11,7 +11,22 @@ import redis
 from fastapi import Request
 
 from .config import Settings
-from .storage import AuditQueryService
+
+
+class AuthQueryService(Protocol):
+    def admin_user_count(self) -> int: ...
+
+    def admin_user_get(self, username: str) -> Optional[Dict[str, Any]]: ...
+
+    def admin_user_create(self, username: str, password_hash: str, must_change_password: bool = False) -> None: ...
+
+    def admin_user_update_login_success(self, username: str) -> None: ...
+
+    def admin_user_bump_token_version(self, username: str) -> None: ...
+
+    def admin_user_change_password(self, username: str, new_password_hash: str) -> None: ...
+
+    def auth_event_insert(self, event_type: str, username: str, source_ip: str, user_agent: str) -> None: ...
 
 
 @dataclass
@@ -22,7 +37,7 @@ class AuthUser:
 
 
 class AuthService:
-    def __init__(self, settings: Settings, query_service: AuditQueryService) -> None:
+    def __init__(self, settings: Settings, query_service: AuthQueryService) -> None:
         self.settings = settings
         self.query_service = query_service
         self._redis = self._build_redis_client()

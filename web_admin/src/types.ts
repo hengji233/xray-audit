@@ -24,11 +24,14 @@ export interface AccessEventRow {
 
 export interface HealthResponse {
   node_id: string;
+  storage_backend: "mysql" | "d1" | string;
   collector_embedded: boolean;
   log_path: string;
   error_log_path?: string;
   db_state: Record<string, unknown> | null;
   db_error_state?: Record<string, unknown> | null;
+  storage_state?: Record<string, unknown> | null;
+  storage_error_state?: Record<string, unknown> | null;
   redis_health: Record<string, unknown> | null;
   local_stats: Record<string, unknown> | null;
   collector_lag_seconds?: number | null;

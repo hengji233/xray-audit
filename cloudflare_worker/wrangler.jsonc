@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xray-audit-d1-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-21",
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "xray-audit",
+    "database_id": "replace-with-d1-id",
+    "migrations_dir": "migrations"
+  }]
+}

@@ -23,5 +23,7 @@ docker/.env.*
 !.env.example
 web_admin/node_modules/
 web_admin/dist/
+cloudflare_worker/node_modules/
+cloudflare_worker/.wrangler/
 xray_audit/frontend_dist/*
 !xray_audit/frontend_dist/.gitkeep

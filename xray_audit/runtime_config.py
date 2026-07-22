@@ -4,10 +4,15 @@ import json
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from .config import Settings
-from .storage import AuditQueryService
+
+
+class RuntimeConfigQueryService(Protocol):
+    def runtime_config_all(self) -> List[Dict[str, Any]]: ...
+
+    def runtime_config_upsert(self, values: Dict[str, Any], changed_by: str, source_ip: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -234,7 +239,7 @@ def _defaults_from_settings(settings: Settings) -> Dict[str, Any]:
 
 
 class RuntimeConfigManager:
-    def __init__(self, settings: Settings, query_service: AuditQueryService) -> None:
+    def __init__(self, settings: Settings, query_service: RuntimeConfigQueryService) -> None:
         self.settings = settings
         self.query_service = query_service
         self._lock = threading.Lock()

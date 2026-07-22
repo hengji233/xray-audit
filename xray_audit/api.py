@@ -17,10 +17,10 @@ from .config import Settings
 from .geoip import GeoIPService
 from .redis_cache import RedisCache
 from .runtime_config import RuntimeConfigManager
-from .storage import AuditQueryService
+from .storage_factory import create_query_service
 
 settings = Settings.from_env()
-query_service = AuditQueryService(settings)
+query_service = create_query_service(settings)
 runtime_config = RuntimeConfigManager(settings, query_service)
 redis_cache = RedisCache(settings)
 geoip_service = GeoIPService(settings, query_service, runtime_config=runtime_config)
@@ -349,11 +349,14 @@ def health(request: Request) -> Dict[str, Any]:
 
     return {
         "node_id": settings.node_id,
+        "storage_backend": settings.storage_backend,
         "collector_embedded": settings.collector_embedded,
         "log_path": settings.log_path,
         "error_log_path": settings.error_log_path,
         "db_state": state,
         "db_error_state": error_state,
+        "storage_state": state,
+        "storage_error_state": error_state,
         "redis_health": cache_health,
         "local_stats": local_stats,
         "collector_lag_seconds": collector_lag_seconds,

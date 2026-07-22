@@ -1,17 +1,17 @@
 # Xray Audit Global Handoff Memory
 
 ## Snapshot Baseline
-- Last updated (UTC): 2026-02-25T08:00:00Z
-- Scope: standalone Xray audit stack (Python + MySQL + Redis + Vue3)
+- Last updated (UTC): 2026-07-21T00:00:00Z
+- Scope: standalone Xray audit stack (Python + MySQL or Cloudflare D1 + optional Redis + Vue3)
 - Canonical repository: `zcl19/xray-audit`
 - Core goal: user-level access/error audit with near-real-time dashboard and searchable history
-- Deployment topology: Cloudflare -> Nginx -> FastAPI (`127.0.0.1:8088`)
+- Deployment topology: reverse proxy -> FastAPI (`127.0.0.1:8088`) -> MySQL, or authenticated Worker gateway -> D1
 
 ## Architecture And Responsibilities
 - `xray_audit.collector_runner`
   - tails Xray access/error logs
   - parses structured events
-  - persists to MySQL
+  - persists to MySQL or to D1 through the authenticated Worker gateway
   - updates Redis near-realtime aggregates
   - executes retention cleanup
 - `xray_audit.run_api` (FastAPI)
@@ -22,6 +22,10 @@
 - `web_admin` (Vue3 + TS)
   - pages: Overview / Events / Errors / Users / Settings / System / Login
   - uses relative `/api/v1/*` paths for reverse-proxy compatibility
+- `cloudflare_worker` (TypeScript Worker)
+  - exposes allowlisted storage operations; it does not expose arbitrary SQL
+  - authenticates storage requests with `GATEWAY_TOKEN`
+  - applies schema changes from `cloudflare_worker/migrations` with Wrangler
 
 ## Runtime Data Model
 - Access pipeline:
@@ -78,12 +82,18 @@
   - `cd web_admin && npm install && npm run build`
 - Docker deployment:
   - `cd docker && docker compose up -d`
+- D1 deployment:
+  - see `docs/D1_DEPLOYMENT.md`
+- MySQL to D1 migration:
+  - see `docs/MYSQL_TO_D1_MIGRATION.md`
 
 ## Known Risks And Gotchas
 - Under extreme load, Xray logging may drop lines.
 - If disk usage reaches 100%, Redis persistence can fail and block writes.
 - If collector is not managed by systemd/compose restart policy, crashes can stop ingestion.
 - Cloudflare/browser cache can delay `index.html` updates.
+- D1 databases are single-threaded and constrained to 10 GB paid or 500 MB free; retention and bounded queries are operational requirements.
+- Redis remains optional cache/aggregation infrastructure and is not replaced by D1.
 
 ## Conventions
 - Time handling:
@@ -103,3 +113,5 @@
   - timezone query fix + health metrics + FULLTEXT optimization
 - 2026-02-25
   - standalone-public packaging baseline added (`docker`, GHCR release workflow, compatibility contract docs)
+- 2026-07-21
+  - selectable MySQL/D1 storage documented with D1 deployment, migration, CI, security, and cost guidance

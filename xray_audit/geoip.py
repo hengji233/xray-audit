@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import ipaddress
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Protocol
 
 import httpx
 
 from .config import Settings
 from .runtime_config import RuntimeConfigManager
-from .storage import AuditQueryService
+
+
+class GeoQueryService(Protocol):
+    def geo_cache_get(self, ips: List[str], ttl_hours: int) -> Dict[str, Dict[str, Any]]: ...
+
+    def geo_cache_upsert(self, rows: List[Dict[str, Any]]) -> None: ...
 
 
 class GeoIPService:
     def __init__(
         self,
         settings: Settings,
-        query_service: AuditQueryService,
+        query_service: GeoQueryService,
         runtime_config: RuntimeConfigManager | None = None,
     ) -> None:
         self.settings = settings

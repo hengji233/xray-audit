@@ -1,9 +1,9 @@
 # Node Memory: primary-node
 
 ## Snapshot Baseline
-- Last updated (UTC): 2026-02-25T08:00:00Z
-- Host (masked): `38.55.*.*:22`
-- Public domain (masked): `audit.example.com`
+- Last updated (UTC): 2026-07-21T00:00:00Z
+- Host: omitted from public documentation
+- Public domain: omitted from public documentation
 - Runtime Linux user: `audituser`
 - Deployment root: `/home/audituser/xray_audit`
 - Xray log root: `/usr/local/x-ui`
@@ -30,8 +30,8 @@
 - Process check:
   - `ps -ef | grep -E 'xray_audit.run_api|xray_audit.collector_runner' | grep -v grep`
 - API smoke:
-  - `curl -I https://audit.example.com/`
-  - `curl -s https://audit.example.com/api/v1/health`
+  - `curl -I https://audit.example.invalid/`
+  - `curl -s https://audit.example.invalid/api/v1/health`
 - Disk check:
   - `df -h`
   - `find / -xdev -type f -size +50M -printf '%s %p\n' 2>/dev/null | sort -nr | head`
@@ -55,3 +55,5 @@
   - metrics endpoint and timezone query fixes deployed
 - 2026-02-25
   - standalone release packaging assets prepared for public repository
+- 2026-07-21
+  - MySQL remains the node baseline; documented D1 as an alternate backend with a controlled migration runbook

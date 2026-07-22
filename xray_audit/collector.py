@@ -15,7 +15,7 @@ from .models import ParsedErrorEvent, ParsedEvent
 from .parser import parse_line
 from .redis_cache import RedisCache
 from .runtime_config import RuntimeConfigManager
-from .storage import AuditQueryService, MySQLIngestor
+from .storage_factory import create_ingestor, create_query_service
 from .tailer import LogTailer
 
 
@@ -78,8 +78,8 @@ class CollectorStats:
 class AuditCollector:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.ingestor = MySQLIngestor(settings)
-        self.query_service = AuditQueryService(settings)
+        self.ingestor = create_ingestor(settings)
+        self.query_service = create_query_service(settings)
         self.runtime_config = RuntimeConfigManager(settings, self.query_service)
         self.redis_cache = RedisCache(settings)
         self.tailer = LogTailer(settings.log_path)

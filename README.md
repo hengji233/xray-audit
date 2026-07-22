@@ -8,7 +8,7 @@ This repository is designed to be published independently from Xray-core. It con
 
 - Tails Xray access/error logs
 - Parses access, DNS, and error events
-- Stores structured events in MySQL
+- Stores structured events in MySQL or Cloudflare D1 through an authenticated Worker gateway
 - Caches realtime aggregates in Redis
 - Serves APIs and Vue3 admin dashboard with FastAPI
 
@@ -19,16 +19,19 @@ This repository is designed to be published independently from Xray-core. It con
 - `sql/`: schema and migrations
 - `deploy/`: nginx/systemd/logrotate examples
 - `docker/`: Dockerfile and compose deployment
+- `cloudflare_worker/`: authenticated D1 storage gateway and D1 schema migrations
 - `docs/`: handoff memory, SOP, compatibility contract
 - `tests/`: backend tests
 
-## Quick Start (Local)
+## Quick Start (MySQL)
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+# Set the blank database and auth secrets in .env.
+# Keep AUDIT_STORAGE_BACKEND=mysql.
 python -m xray_audit.init_db
 python -m xray_audit.collector_runner
 ```
@@ -47,6 +50,34 @@ cd web_admin
 npm install
 npm run build
 ```
+
+## Quick Start (Cloudflare D1)
+
+D1 is accessed through the Worker gateway; the Python processes never connect
+to D1 directly. A Workers Paid plan is recommended for production because it
+provides the practical capacity and operational headroom expected by a
+continuous audit workload.
+
+```bash
+cd cloudflare_worker
+npm install
+npx wrangler login
+npx wrangler d1 create xray-audit
+# Put the returned database_id in wrangler.jsonc.
+npx wrangler secret put GATEWAY_TOKEN
+npx wrangler d1 migrations apply xray-audit --remote
+npm run deploy
+```
+
+Configure Python with `AUDIT_STORAGE_BACKEND=d1`, the deployed
+`AUDIT_D1_GATEWAY_URL`, and the same secret in `AUDIT_D1_GATEWAY_TOKEN`, then
+start the collector and API as shown above. Do not run `xray_audit.init_db` for
+D1. See [D1 deployment](docs/D1_DEPLOYMENT.md) for limits, verification,
+security, Redis, Docker, and systemd guidance.
+
+MySQL migration supports resumable bounded copies with `--start-pk` and
+`--end-pk`; see [MySQL to D1 migration](docs/MYSQL_TO_D1_MIGRATION.md) before
+moving production data.
 
 ## API Surface
 
@@ -88,10 +119,7 @@ cp ../.env.example .env
 
 2) Set at least these values in `docker/.env`:
 
-- `AUDIT_MYSQL_HOST`
-- `AUDIT_MYSQL_USER`
-- `AUDIT_MYSQL_PASSWORD`
-- `AUDIT_MYSQL_DB`
+- `AUDIT_STORAGE_BACKEND` and the matching `AUDIT_MYSQL_*` or `AUDIT_D1_*` values
 - `AUDIT_REDIS_URL`
 - `AUDIT_AUTH_JWT_SECRET`
 - `AUDIT_HOST_XRAY_LOG_DIR` (for example `/usr/local/x-ui`)
@@ -114,7 +142,7 @@ docker compose up -d
 - Pin `XRAY_AUDIT_IMAGE=ghcr.io/zcl19/xray-audit:vX.Y.Z` in `docker/.env`
 - Run `docker compose up -d`
 
-## Migrations
+## Database Migrations
 
 Run all required migrations before app upgrade:
 
@@ -127,11 +155,25 @@ mysql -uUSER -p DBNAME < sql/migrations/20260220_add_error_fulltext_index.sql
 mysql -uUSER -p DBNAME < sql/migrations/20260221_add_admin_force_change_flag.sql
 ```
 
+For D1, apply the Worker migrations before deploying the corresponding Python
+version:
+
+```bash
+cd cloudflare_worker
+npx wrangler d1 migrations apply xray-audit --remote
+```
+
+For an existing MySQL installation, follow
+[MySQL to D1 migration](docs/MYSQL_TO_D1_MIGRATION.md). Do not point MySQL and
+D1 collectors at the same log file concurrently.
+
 ## CI/CD
 
 - CI workflow: `.github/workflows/ci.yml`
   - `pytest -q`
   - frontend build (`npm install && npm run build`)
+  - D1 gateway typecheck and tests
+  - D1 migrations applied to a local Wrangler database
   - docs sensitivity gate
 - Release workflow: `.github/workflows/release.yml`
   - trigger on tag `v*`
@@ -157,6 +199,7 @@ git commit -m "chore: bootstrap xray-audit from tools/xray_audit snapshot"
 - Do not commit real credentials into docs or `.env.example`.
 - Keep production deployment pinned to version tags, not bare `latest`.
 - Rotate bootstrap admin password after first login.
+- Store the Worker gateway token only in Wrangler secrets and the protected Python runtime environment.
 
 ## Compatibility Contract
 

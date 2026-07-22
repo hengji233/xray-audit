@@ -1,12 +1,12 @@
 {
-  "memory_version": "1.1.0",
-  "last_updated_at_utc": "2026-02-25T08:00:00Z",
+  "memory_version": "1.2.0",
+  "last_updated_at_utc": "2026-07-21T00:00:00Z",
   "scope": "global_and_node",
   "global_doc": "docs/HANDOFF_GLOBAL_MEMORY.md",
   "node_docs": [
     {
       "node_id": "node-1",
-      "host": "38.55.*.*",
+      "host": "omitted",
       "doc_path": "docs/NODE_PRIMARY_MEMORY.md",
       "last_verified_at_utc": "2026-02-25T07:50:00Z",
       "services": {
@@ -37,9 +37,21 @@
     "error_keyword_fulltext_first_fallback_like",
     "retention_cleanup_extended_tables",
     "local_picker_to_utc_query_conversion",
-    "docker_packaging_and_ghcr_release"
+    "docker_packaging_and_ghcr_release",
+    "selectable_mysql_or_d1_storage",
+    "authenticated_d1_worker_gateway"
   ],
   "recent_milestones": [
+    {
+      "date_utc": "2026-07-21",
+      "title": "D1 deployment and migration operations",
+      "impact_scope": ["storage", "worker", "docs", "ci", "ops"],
+      "evidence": [
+        "docs/D1_DEPLOYMENT.md added",
+        "docs/MYSQL_TO_D1_MIGRATION.md added",
+        "CI validates Worker types, tests, and local D1 migrations"
+      ]
+    },
     {
       "date_utc": "2026-02-25",
       "title": "Standalone release packaging baseline",
@@ -82,7 +94,8 @@
     "xray logging may drop lines under extreme load",
     "small root disk can cause redis persistence failures",
     "collector resilience depends on process manager restart policy",
-    "cloudflare/browser cache can delay frontend index refresh"
+    "cloudflare/browser cache can delay frontend index refresh",
+    "d1 database size and single-threaded execution require retention and bounded workloads"
   ],
   "sensitivity_policy": "partial_masking"
 }
