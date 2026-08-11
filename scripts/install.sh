@@ -213,6 +213,7 @@ cat >"$UNIT_TMP" <<EOF
 Description=Xray Audit API with embedded collector
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -224,7 +225,6 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=$CURRENT_LINK/venv/bin/xray-audit-api
 Restart=always
 RestartSec=2
-StartLimitIntervalSec=0
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
