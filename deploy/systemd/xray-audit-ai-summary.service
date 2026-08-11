@@ -2,9 +2,10 @@
 Description=Legacy Xray Audit AI Error Summary Worker (disabled in v0.2.0)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
+ConditionPathExists=/etc/xray-audit/enable-legacy-ai-summary
 
 [Service]
-ConditionPathExists=/etc/xray-audit/enable-legacy-ai-summary
 Type=simple
 User=audituser
 Group=audituser
@@ -14,7 +15,6 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/xray-audit/current/venv/bin/xray-audit-ai-summary
 Restart=always
 RestartSec=3
-StartLimitIntervalSec=0
 NoNewPrivileges=true
 PrivateTmp=true
 UMask=0027

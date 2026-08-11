@@ -2,6 +2,7 @@
 Description=Xray Audit API with embedded collector
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -14,7 +15,6 @@ Environment=AUDIT_COLLECTOR_EMBEDDED=true
 ExecStart=/opt/xray-audit/current/venv/bin/xray-audit-api
 Restart=always
 RestartSec=2
-StartLimitIntervalSec=0
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

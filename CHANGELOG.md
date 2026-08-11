@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-11
+
+### Fixed
+- Place systemd start-limit and condition directives in the unit section.
+
 ## [0.2.0] - 2026-08-10
 
 ### Changed
