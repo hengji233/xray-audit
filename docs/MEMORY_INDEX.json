@@ -1,26 +1,43 @@
 {
-  "memory_version": "1.2.0",
-  "last_updated_at_utc": "2026-07-21T00:00:00Z",
+  "memory_version": "1.3.0",
+  "last_updated_at_utc": "2026-07-24T00:00:00Z",
   "scope": "global_and_node",
   "global_doc": "docs/HANDOFF_GLOBAL_MEMORY.md",
+  "ai_context_doc": "docs/AI_CONTEXT.md",
+  "long_term_requirements": [
+    "linux_script_install_without_required_sql_and_dashboard_sql_configuration",
+    "continue_compiled_distribution_evaluation_with_wheel_systemd_currently_primary",
+    "dashboard_available_with_bounded_nonpersistent_memory_audit_when_sql_absent",
+    "documented_checksummed_atomic_updates_with_health_and_rollback",
+    "ai_context_recoverable_by_reading_ai_context_markdown_and_linked_memory"
+  ],
+  "recovery_protocol": [
+    "read_ai_global_node_and_index",
+    "validate_index_and_preserve_unowned_changes",
+    "inspect_systemd_current_and_releases_without_copying_secrets",
+    "verify_loopback_health_before_and_after_change",
+    "atomically_restore_previous_release_on_failure",
+    "update_all_memory_documents_after_milestone"
+  ],
   "node_docs": [
     {
       "node_id": "node-1",
       "host": "omitted",
       "doc_path": "docs/NODE_PRIMARY_MEMORY.md",
-      "last_verified_at_utc": "2026-02-25T07:50:00Z",
+      "last_verified_at_utc": "2026-07-28T13:01:00Z",
       "services": {
         "api": {
-          "process": ".venv/bin/python -m xray_audit.run_api",
+          "process": "/opt/xray-audit/current/venv/bin/xray-audit-api",
           "listen": "127.0.0.1:8088",
-          "status": "running"
+          "status": "running_and_verified",
+          "collector_mode": "embedded"
         },
         "collector": {
-          "process": ".venv/bin/python -m xray_audit.collector_runner",
-          "status": "running"
+          "process": "embedded_in_api",
+          "status": "not_separate_by_default"
         },
         "frontend": {
-          "dist_path": "/home/audituser/xray_audit/xray_audit/frontend_dist",
+          "dist_path": "/opt/xray-audit/current/venv package data: xray_audit/frontend_dist",
           "last_asset_hash": "index-*.js"
         }
       }
@@ -39,9 +56,29 @@
     "local_picker_to_utc_query_conversion",
     "docker_packaging_and_ghcr_release",
     "selectable_mysql_or_d1_storage",
-    "authenticated_d1_worker_gateway"
+    "authenticated_d1_worker_gateway",
+    "versioned_wheel_systemd_install",
+    "release_wheel_checksum_assets",
+    "memory_audit_backend_with_bounded_ring_buffers",
+    "persistent_local_control_plane_with_encrypted_storage_secrets",
+    "dashboard_storage_configuration_test_and_activation",
+    "production_d1_gateway_and_persistent_ingestion_verified",
+    "production_d1_query_plans_and_index_write_amplification_optimized",
+    "documented_ai_context_recovery_contract"
   ],
   "recent_milestones": [
+    {
+      "date_utc": "2026-07-24",
+      "title": "Memory-first wheel and systemd deployment architecture",
+      "impact_scope": ["release", "installer", "systemd", "docs", "ops"],
+      "evidence": [
+        "scripts/install.sh added",
+        "release workflow attaches wheel and SHA256SUMS",
+        "memory backend and encrypted local control store implemented",
+        "dashboard configures, tests, and activates storage backends",
+        "AI recovery and install/update/storage/security architecture documented"
+      ]
+    },
     {
       "date_utc": "2026-07-21",
       "title": "D1 deployment and migration operations",
@@ -95,7 +132,9 @@
     "small root disk can cause redis persistence failures",
     "collector resilience depends on process manager restart policy",
     "cloudflare/browser cache can delay frontend index refresh",
-    "d1 database size and single-threaded execution require retention and bounded workloads"
+    "d1 database size and single-threaded execution require retention and bounded workloads",
+    "mysql and d1 activation does not automatically apply schema migrations",
+    "linux installer and systemd rollout require end-to-end verification on a disposable host"
   ],
-  "sensitivity_policy": "partial_masking"
+  "sensitivity_policy": "no_real_infrastructure_addresses_or_plaintext_secrets"
 }

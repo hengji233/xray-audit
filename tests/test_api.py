@@ -42,10 +42,9 @@ class _StubQueryService:
         return 1, [
             {
                 "event_time": "2026-02-18T00:00:00",
-                "event_type": "access",
-                "raw_line": "line",
                 "user_email": "u@example.com",
                 "dest_host": "example.com",
+                "protocol": "tcp",
             }
         ]
 
@@ -149,6 +148,7 @@ def test_events_query_success() -> None:
     body = resp.json()
     assert body["total"] == 1
     assert len(body["items"]) == 1
+    assert "raw_line" not in body["items"][0]
 
 
 def test_users_list_page_out_of_range_returns_400() -> None:
@@ -191,6 +191,7 @@ def test_query_errors_success() -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
+    assert resp.json()["persistent"] is False
 
 
 def test_error_summary_success() -> None:
@@ -198,6 +199,7 @@ def test_error_summary_success() -> None:
     resp = client.get("/api/v1/errors/summary", params={"window": "1h"})
     assert resp.status_code == 200
     assert resp.json()["total"] == 3
+    assert resp.json()["persistent"] is False
 
 
 def test_health_contains_monitor_fields() -> None:
@@ -205,7 +207,9 @@ def test_health_contains_monitor_fields() -> None:
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["storage_backend"] == "mysql"
+    assert body["storage_backend"] == "memory"
+    assert body["storage_persistent"] is False
+    assert body["data_lost_on_restart"] is True
     assert "storage_state" in body
     assert "collector_lag_seconds" in body
     assert "api_metrics" in body
@@ -219,3 +223,30 @@ def test_metrics_endpoint_text() -> None:
     text = resp.text
     assert "xray_audit_api_requests_total" in text
     assert "xray_audit_api_responses_5xx_total" in text
+
+
+def test_storage_api_never_echoes_secret() -> None:
+    client = _client()
+    response = client.put(
+        "/api/v1/storage/config",
+        json={
+            "backend": "mysql",
+            "config": {
+                "mysql_host": "db.example.invalid",
+                "mysql_password": "not-returned-secret",
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pending_backend"] == "mysql"
+    assert body["config"]["mysql_password_configured"] is True
+    assert "mysql_password" not in body["config"]
+    assert "not-returned-secret" not in response.text
+
+
+def test_memory_storage_connection_test_is_available_without_sql() -> None:
+    client = _client()
+    response = client.post("/api/v1/storage/test", json={"backend": "memory", "config": {}})
+    assert response.status_code == 200
+    assert response.json()["success"] is True

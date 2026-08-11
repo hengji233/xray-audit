@@ -25,6 +25,7 @@
         </el-table-column>
         <el-table-column prop="dest_host" label="Domain/Host" min-width="200" />
         <el-table-column prop="dest_port" label="Port" width="90" />
+        <el-table-column prop="protocol" label="Protocol" width="110" />
         <el-table-column prop="status" label="Status" width="100" />
         <el-table-column prop="detour" label="Detour" min-width="220" />
       </el-table>

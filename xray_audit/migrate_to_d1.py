@@ -26,12 +26,8 @@ class TableSpec:
     columns: tuple[str, ...]
 
 
-# Parents precede children; the remaining tables have no foreign keys.
 TABLE_SPECS = (
-    TableSpec("audit_raw_events", "id", ("id", "event_time", "event_type", "raw_line", "raw_hash", "node_id", "ingested_at")),
-    TableSpec("audit_access_events", "id", ("id", "raw_event_id", "event_time", "user_email", "src", "dest_raw", "dest_host", "dest_port", "status", "detour", "reason", "is_domain", "confidence")),
-    TableSpec("audit_dns_events", "id", ("id", "raw_event_id", "event_time", "dns_server", "domain", "ips_json", "dns_status", "elapsed_ms", "error_text")),
-    TableSpec("audit_error_events", "id", ("id", "event_time", "level", "session_id", "component", "message", "src", "dest_raw", "dest_host", "dest_port", "category", "signature_hash", "is_noise", "raw_line", "raw_hash", "node_id", "ingested_at")),
+    TableSpec("audit_access_events", "id", ("id", "event_time", "user_email", "src", "dest_host", "dest_port", "protocol", "status", "detour", "reason", "is_domain", "node_id", "event_hash")),
     TableSpec("audit_auth_events", "id", ("id", "event_type", "username", "source_ip", "user_agent", "event_time")),
     TableSpec("audit_admin_users", "id", ("id", "username", "password_hash", "token_version", "is_enabled", "must_change_password", "last_login_at", "created_at", "updated_at")),
     TableSpec("audit_runtime_config", "config_key", ("config_key", "value_json", "value_type", "scope", "updated_by", "updated_at")),
@@ -42,7 +38,7 @@ TABLE_SPECS = (
 )
 TABLES_BY_NAME = {spec.name: spec for spec in TABLE_SPECS}
 JSON_COLUMNS = {"ips_json", "value_json", "old_value_json", "new_value_json", "raw_json"}
-INT64_COLUMNS = {"id", "raw_event_id", "session_id", "inode", "last_offset"}
+INT64_COLUMNS = {"id", "session_id", "inode", "last_offset"}
 NUMERIC_PRIMARY_KEYS = {spec.name for spec in TABLE_SPECS if spec.primary_key == "id"}
 RESUME_VERSION = 1
 

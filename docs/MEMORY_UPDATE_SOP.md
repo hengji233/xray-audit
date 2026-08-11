@@ -10,6 +10,7 @@ This SOP keeps handoff memory consistent, safe, and machine-readable after each 
 - `docs/HANDOFF_GLOBAL_MEMORY.md`
 - `docs/NODE_*.md`
 - `docs/MEMORY_INDEX.json`
+- `docs/AI_CONTEXT.md`
 
 ## Required Section Shape (Markdown)
 Each memory markdown file must keep these sections:
@@ -17,8 +18,15 @@ Each memory markdown file must keep these sections:
 2. `Operational Commands`
 3. `Known Risks And Gotchas`
 4. `Milestone Changelog`
+5. Recovery protocol or a direct reference to `AI_CONTEXT.md`
 
-## Sensitive Data Rule (Partial Masking)
+## Persistent Five-Requirement Check
+Every update must preserve or explicitly supersede all five requirements:
+independent Xray deployment; wheel+systemd host install; default memory with no
+SQL install/init; one API with embedded collection; verified atomic versions
+with health checking and rollback.
+
+## Sensitive Data Rule
 - Never store full plaintext password/token/secret.
 - Mask pattern: keep short prefix and suffix only, middle replaced with `***`.
 - Never include full DSN with embedded password.
@@ -28,11 +36,12 @@ Each memory markdown file must keep these sections:
 1. Update baseline facts in `HANDOFF_GLOBAL_MEMORY.md` if architecture or interfaces changed.
 2. Update node file (`NODE_*.md`) with node-specific runtime/migration/process changes.
 3. Append exactly one milestone entry in both global and node changelog sections.
-4. Update `MEMORY_INDEX.json`:
+4. Reconcile `AI_CONTEXT.md` and its recovery protocol.
+5. Update `MEMORY_INDEX.json`:
    - `last_updated_at_utc`
    - `recent_milestones[0]`
    - any changed capabilities/endpoints/known risks
-5. Run validation checklist.
+6. Run validation checklist.
 
 ## Validation Checklist
 - Structure
@@ -46,6 +55,9 @@ Each memory markdown file must keep these sections:
 - Security
   - [ ] no obvious full secret-like assignment in docs
   - [ ] no unmasked real production domain/IP literals in public docs
+- Recovery
+  - [ ] five long-term requirements remain present and consistent
+  - [ ] recovery checks `current`, systemd, health, and rollback without exposing secrets
 
 ## Suggested Verification Commands
 - JSON validity:

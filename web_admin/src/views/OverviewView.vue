@@ -130,7 +130,7 @@ watch(windowValue, () => {
 
 onMounted(() => {
   reload();
-  timer = window.setInterval(reload, 3000);
+  timer = window.setInterval(reload, 15000);
 });
 
 onUnmounted(() => {

@@ -151,6 +151,20 @@ the same log file during a cutover.
 - Audit records can include user identifiers, source addresses, destinations, and raw log lines. Apply retention and access policies appropriate to that data.
 - Cost is driven by Workers requests and CPU plus D1 rows read, rows written, and storage. Ingestion request count is approximately events divided by the configured batch size, before retries.
 - Indexed, bounded time queries cost less and block the single-threaded database for less time. Avoid broad dashboard ranges and monitor database size and usage in Cloudflare.
+- Keep dashboard polling conservative. Overview refreshes every 15 seconds;
+  event and error tables default to manual refresh. Production access-log
+  analysis showed the three Overview aggregates accounted for about 98.8% of
+  dashboard API calls before this change.
+- D1 indexes are a write-cost tradeoff. Migrations `0002` and `0003` replace
+  low-value indexes with time-bounded covering indexes. Do not add an index
+  without checking both `EXPLAIN QUERY PLAN` and the extra rows written for
+  every ingested event.
+- On the verified workload, forcing `active_users` to `idx_access_time` reduced
+  a representative query from 25,392 rows read to 8; Top Domains read 3 rows
+  and the five-minute summary read 63 rows after optimization.
+- The Workers Free write limit can still be exceeded by the event volume alone.
+  Index tuning does not replace event sampling, category filtering, aggregation,
+  or a paid plan when logical audit writes remain above the daily allowance.
 
 ## Operational Rollback
 

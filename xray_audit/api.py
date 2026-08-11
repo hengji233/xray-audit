@@ -17,10 +17,11 @@ from .config import Settings
 from .geoip import GeoIPService
 from .redis_cache import RedisCache
 from .runtime_config import RuntimeConfigManager
-from .storage_factory import create_query_service
+from .storage_manager import StorageManager
 
 settings = Settings.from_env()
-query_service = create_query_service(settings)
+storage_manager = StorageManager(settings)
+query_service = storage_manager.query
 runtime_config = RuntimeConfigManager(settings, query_service)
 redis_cache = RedisCache(settings)
 geoip_service = GeoIPService(settings, query_service, runtime_config=runtime_config)
@@ -108,12 +109,25 @@ class GeoIPBatchRequest(BaseModel):
     ips: List[str] = Field(default_factory=list)
 
 
+class StorageConfigRequest(BaseModel):
+    backend: str = Field(pattern="^(memory|mysql|d1)$")
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StorageActivateRequest(BaseModel):
+    backend: str = Field(pattern="^(memory|mysql|d1)$")
+
+
 @app.on_event("startup")
 def startup() -> None:
     auth_service.bootstrap_admin_if_needed()
     global collector
     if settings.collector_embedded:
-        collector = AuditCollector(settings)
+        collector = AuditCollector(
+            storage_manager.active_settings,
+            ingestor=storage_manager.ingestor,
+            query_service=query_service,
+        )
         collector.start()
 
 
@@ -121,6 +135,7 @@ def startup() -> None:
 def shutdown() -> None:
     if collector is not None:
         collector.stop()
+    storage_manager.close()
 
 
 @app.middleware("http")
@@ -319,6 +334,105 @@ def config_history(
     return {"total": total, "page": page, "page_size": page_size, "items": rows}
 
 
+_STORAGE_CONFIG_FIELDS = {
+    "mysql_host", "mysql_port", "mysql_user", "mysql_password", "mysql_db", "mysql_charset",
+    "d1_gateway_url", "d1_gateway_token", "d1_timeout_seconds", "d1_batch_size", "d1_max_retries",
+}
+
+
+def _validated_storage_config(values: Dict[str, Any]) -> Dict[str, Any]:
+    unknown = sorted(set(values) - _STORAGE_CONFIG_FIELDS)
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unsupported storage fields: {', '.join(unknown)}")
+    result = dict(values)
+    for key in ("mysql_host", "mysql_user", "mysql_db", "mysql_charset", "d1_gateway_url"):
+        if key in result:
+            result[key] = str(result[key]).strip()
+    for key in ("mysql_password", "d1_gateway_token"):
+        if key in result:
+            result[key] = str(result[key])
+    ranges = {
+        "mysql_port": (1, 65535), "d1_batch_size": (1, 50), "d1_max_retries": (0, 10),
+    }
+    for key, (minimum, maximum) in ranges.items():
+        if key in result:
+            try:
+                result[key] = int(result[key])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"{key} must be an integer")
+            if not minimum <= result[key] <= maximum:
+                raise HTTPException(status_code=400, detail=f"{key} must be between {minimum} and {maximum}")
+    if "d1_timeout_seconds" in result:
+        try:
+            result["d1_timeout_seconds"] = float(result["d1_timeout_seconds"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="d1_timeout_seconds must be a number")
+        if not 0.1 <= result["d1_timeout_seconds"] <= 120:
+            raise HTTPException(status_code=400, detail="d1_timeout_seconds must be between 0.1 and 120")
+    return result
+
+
+def _storage_failure(err: Exception) -> HTTPException:
+    # Connection libraries can include endpoints or credentials in exception text.
+    return HTTPException(status_code=400, detail=f"storage operation failed ({type(err).__name__})")
+
+
+@app.get("/api/v1/storage/config")
+def storage_config(request: Request) -> Dict[str, Any]:
+    _require_user(request)
+    return storage_manager.public_config()
+
+
+@app.put("/api/v1/storage/config")
+def storage_config_update(payload: StorageConfigRequest, request: Request) -> Dict[str, Any]:
+    _require_user(request)
+    values = _validated_storage_config(payload.config)
+    storage_manager.save_pending(payload.backend, values)
+    return storage_manager.public_config()
+
+
+@app.post("/api/v1/storage/test")
+def storage_test(payload: StorageConfigRequest, request: Request) -> Dict[str, Any]:
+    _require_user(request)
+    values = _validated_storage_config(payload.config)
+    try:
+        storage_manager.test(payload.backend, values)
+    except Exception as err:
+        raise _storage_failure(err)
+    return {"success": True, "status": "ready", "message": "storage connection is ready"}
+
+
+@app.get("/api/v1/storage/status")
+def storage_status(request: Request) -> Dict[str, Any]:
+    _require_user(request)
+    return storage_manager.public_config()
+
+
+@app.post("/api/v1/storage/activate")
+def storage_activate(payload: StorageActivateRequest, request: Request) -> Dict[str, Any]:
+    _require_user(request)
+    global collector
+    had_collector = collector is not None
+    if collector is not None:
+        collector.stop()
+        collector = None
+    try:
+        active_settings, ingestor = storage_manager.activate(payload.backend)
+    except Exception as err:
+        if had_collector:
+            collector = AuditCollector(
+                storage_manager.active_settings,
+                ingestor=storage_manager.ingestor,
+                query_service=query_service,
+            )
+            collector.start()
+        raise _storage_failure(err)
+    if active_settings.collector_embedded:
+        collector = AuditCollector(active_settings, ingestor=ingestor, query_service=query_service)
+        collector.start()
+    return {"success": True, "status": "active", "message": f"{payload.backend} storage activated"}
+
+
 @app.get("/")
 def root() -> FileResponse:
     index_path = _frontend_dist_dir / "index.html"
@@ -349,8 +463,10 @@ def health(request: Request) -> Dict[str, Any]:
 
     return {
         "node_id": settings.node_id,
-        "storage_backend": settings.storage_backend,
-        "collector_embedded": settings.collector_embedded,
+        "storage_backend": storage_manager.active_settings.storage_backend,
+        "collector_embedded": storage_manager.active_settings.collector_embedded,
+        "storage_persistent": storage_manager.active_settings.storage_backend != "memory",
+        "data_lost_on_restart": storage_manager.active_settings.storage_backend == "memory",
         "log_path": settings.log_path,
         "error_log_path": settings.error_log_path,
         "db_state": state,
@@ -606,6 +722,7 @@ def query_errors(
         "page": page,
         "page_size": page_size,
         "items": rows,
+        "persistent": False,
     }
 
 
@@ -614,7 +731,7 @@ def error_summary(request: Request, window: str = Query(default="1h")) -> Dict[s
     _require_user(request)
     seconds = _parse_window_to_seconds(window)
     data = query_service.error_summary_stats(window_seconds=seconds)
-    return {"window": window, **data}
+    return {"window": window, "persistent": False, **data}
 
 
 @app.post("/api/v1/geoip/batch")

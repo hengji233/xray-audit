@@ -1,5 +1,5 @@
 [Unit]
-Description=Xray Audit API
+Description=Xray Audit API with embedded collector
 After=network-online.target
 Wants=network-online.target
 
@@ -7,15 +7,20 @@ Wants=network-online.target
 Type=simple
 User=audituser
 Group=audituser
-WorkingDirectory=/home/audituser/xray_audit
-EnvironmentFile=-/etc/xray-audit.env
+WorkingDirectory=/opt/xray-audit/current
+EnvironmentFile=/etc/xray-audit/xray-audit.env
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/audituser/xray_audit/.venv/bin/python -m xray_audit.run_api
+Environment=AUDIT_COLLECTOR_EMBEDDED=true
+ExecStart=/opt/xray-audit/current/venv/bin/xray-audit-api
 Restart=always
 RestartSec=2
 StartLimitIntervalSec=0
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/xray-audit
+ReadOnlyPaths=-/var/log/xray
 UMask=0027
 LimitNOFILE=65535
 

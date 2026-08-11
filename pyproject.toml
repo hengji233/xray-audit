@@ -4,9 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xray-audit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Xray access log audit collector and API"
 requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.116.1",
+    "uvicorn==0.35.0",
+    "pymysql==1.1.1",
+    "redis==6.4.0",
+    "httpx==0.28.1",
+    "bcrypt==4.2.0",
+    "PyJWT==2.9.0",
+    "cryptography==45.0.6",
+]
+
+[tool.setuptools.package-data]
+xray_audit = ["frontend_dist/*", "frontend_dist/**/*", "dashboard/*", "dashboard/**/*"]
+
+[tool.setuptools.data-files]
+sql = ["sql/schema.sql"]
+
+[tool.setuptools.packages.find]
+include = ["xray_audit*"]
+exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

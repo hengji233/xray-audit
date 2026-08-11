@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-10
+
+### Changed
+- Persist only parsed access events across MySQL, D1, and memory backends.
+- Replace raw/access joins with one compact access table and three query indexes.
+- Keep recent error events only in a bounded process-local ring buffer.
+- Stop persisting DNS, unknown, raw log text, and error log records.
+- Add collector backpressure so storage outages cannot grow pending batches without bound.
+- Mark error API responses as non-persistent and update the dashboard contract.
+
+### Operations
+- Existing audit event history may be discarded when applying the v0.2.0 schema.
+- Rebuild the MySQL `xray_audit` database from `sql/schema.sql` before activating v0.2.0.
+- Apply D1 migration `0004_access_storage_v2.sql` before deploying the v0.2.0 Worker.
+- The standalone AI error-summary worker is unsupported because errors are process-local.
+
 ### Added
 - Selectable MySQL or Cloudflare D1 storage backends.
 - Authenticated Cloudflare Worker gateway with a fixed storage operation allowlist and D1 schema migrations.

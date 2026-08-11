@@ -1,63 +1,23 @@
-CREATE TABLE IF NOT EXISTS audit_raw_events (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  event_time DATETIME(6) NOT NULL,
-  event_type VARCHAR(16) NOT NULL,
-  raw_line TEXT NOT NULL,
-  raw_hash CHAR(64) NOT NULL,
-  node_id VARCHAR(32) NOT NULL,
-  ingested_at DATETIME(6) NOT NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY uniq_raw_hash_time_node (raw_hash, event_time, node_id),
-  KEY idx_event_time (event_time),
-  KEY idx_event_type_time (event_type, event_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS audit_access_events (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  raw_event_id BIGINT UNSIGNED NOT NULL,
   event_time DATETIME(6) NOT NULL,
   user_email VARCHAR(191) NOT NULL,
-  src VARCHAR(255) NOT NULL,
-  dest_raw VARCHAR(512) NOT NULL,
+  src VARCHAR(64) NOT NULL,
   dest_host VARCHAR(191) NOT NULL,
-  dest_port INT NULL,
-  status VARCHAR(32) NOT NULL,
-  detour VARCHAR(255) NOT NULL,
-  reason TEXT NOT NULL,
+  dest_port SMALLINT UNSIGNED NULL,
+  protocol VARCHAR(8) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  detour VARCHAR(128) NOT NULL,
+  reason VARCHAR(255) NOT NULL,
   is_domain TINYINT(1) NOT NULL,
-  confidence VARCHAR(16) NOT NULL,
+  node_id VARCHAR(32) NOT NULL,
+  event_hash BINARY(16) NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uniq_access_raw_event (raw_event_id),
-  KEY idx_user_time (user_email, event_time),
-  KEY idx_dest_host_time (dest_host, event_time),
-  KEY idx_event_time (event_time),
-  KEY idx_event_time_user (event_time, user_email),
-  KEY idx_event_time_dest_host (event_time, dest_host),
-  KEY idx_event_time_detour (event_time, detour),
-  KEY idx_event_time_status (event_time, status),
-  CONSTRAINT fk_access_raw_event FOREIGN KEY (raw_event_id)
-    REFERENCES audit_raw_events(id)
-    ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS audit_dns_events (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  raw_event_id BIGINT UNSIGNED NOT NULL,
-  event_time DATETIME(6) NOT NULL,
-  dns_server VARCHAR(255) NOT NULL,
-  domain VARCHAR(191) NOT NULL,
-  ips_json JSON NOT NULL,
-  dns_status VARCHAR(64) NOT NULL,
-  elapsed_ms INT NULL,
-  error_text TEXT NOT NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY uniq_dns_raw_event (raw_event_id),
-  KEY idx_domain_time (domain, event_time),
-  KEY idx_event_time (event_time),
-  CONSTRAINT fk_dns_raw_event FOREIGN KEY (raw_event_id)
-    REFERENCES audit_raw_events(id)
-    ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  UNIQUE KEY uniq_event_hash_time_node (event_hash, event_time, node_id),
+  KEY idx_user_time (user_email, event_time, id),
+  KEY idx_dest_host_time (dest_host, event_time, id),
+  KEY idx_event_time (event_time, id)
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS collector_state (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -82,34 +42,6 @@ CREATE TABLE IF NOT EXISTS audit_ip_geo_cache (
   updated_at DATETIME(6) NOT NULL,
   PRIMARY KEY (ip),
   KEY idx_updated_at (updated_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS audit_error_events (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  event_time DATETIME(6) NOT NULL,
-  level VARCHAR(16) NOT NULL,
-  session_id BIGINT NULL,
-  component VARCHAR(191) NOT NULL,
-  message TEXT NOT NULL,
-  src VARCHAR(255) NOT NULL,
-  dest_raw VARCHAR(512) NOT NULL,
-  dest_host VARCHAR(191) NOT NULL,
-  dest_port INT NULL,
-  category VARCHAR(64) NOT NULL,
-  signature_hash CHAR(64) NOT NULL,
-  is_noise TINYINT(1) NOT NULL,
-  raw_line TEXT NOT NULL,
-  raw_hash CHAR(64) NOT NULL,
-  node_id VARCHAR(32) NOT NULL,
-  ingested_at DATETIME(6) NOT NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY uniq_err_raw_hash_time_node (raw_hash, event_time, node_id),
-  KEY idx_err_event_time (event_time),
-  KEY idx_err_level_time (level, event_time),
-  KEY idx_err_category_time (category, event_time),
-  KEY idx_err_noise_time (is_noise, event_time),
-  KEY idx_err_sig_time (signature_hash, event_time),
-  FULLTEXT KEY ft_err_lookup (component, message, src, dest_raw)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS audit_job_state (

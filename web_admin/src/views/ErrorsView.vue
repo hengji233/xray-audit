@@ -2,6 +2,14 @@
   <div>
     <h1 class="page-title">Errors</h1>
     <el-card class="page-card">
+      <el-alert
+        class="persistence-notice"
+        :title="errorsPersistent ? 'Recent errors are persistent' : 'Recent errors are non-persistent'"
+        :description="errorsPersistent ? 'Error history is retained by the active storage backend.' : 'These errors are kept in memory only and are lost when the service restarts.'"
+        type="info"
+        :closable="false"
+        show-icon
+      />
       <div class="toolbar">
         <el-date-picker
           v-model="timeRange"
@@ -27,7 +35,7 @@
         <el-button type="primary" :loading="loading" @click="loadData">Search</el-button>
         <el-button @click="resetFilters">Reset</el-button>
         <el-button @click="exportCsv">Export CSV</el-button>
-        <el-switch v-model="autoRefresh" inline-prompt active-text="Auto 3s" inactive-text="Manual" />
+        <el-switch v-model="autoRefresh" inline-prompt active-text="Auto 15s" inactive-text="Manual" />
       </div>
 
       <div class="metric-grid">
@@ -142,12 +150,13 @@ const summary = ref<ErrorSummary>({
   top_categories: [],
 });
 const loading = ref(false);
-const autoRefresh = ref(true);
+const autoRefresh = ref(false);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(50);
 let timer: number | undefined;
 const defaultWindowSeconds = 3600;
+const errorsPersistent = ref(false);
 
 const categoryChartOption = computed(() => ({
   backgroundColor: "transparent",
@@ -217,6 +226,7 @@ async function loadData(alignRangeToNow = false) {
     rows.value = queryData.items;
     total.value = queryData.total;
     summary.value = summaryData;
+    errorsPersistent.value = queryData.persistent ?? summaryData.persistent ?? false;
   } catch (error) {
     ElMessage.error("Failed to query errors");
   } finally {
@@ -304,7 +314,7 @@ function startAutoRefresh() {
   stopAutoRefresh();
   timer = window.setInterval(() => {
     loadData(true);
-  }, 3000);
+  }, 15000);
 }
 
 watch(autoRefresh, (enabled) => {

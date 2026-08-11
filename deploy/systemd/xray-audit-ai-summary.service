@@ -1,16 +1,17 @@
 [Unit]
-Description=Xray Audit AI Error Summary Worker
+Description=Legacy Xray Audit AI Error Summary Worker (disabled in v0.2.0)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
+ConditionPathExists=/etc/xray-audit/enable-legacy-ai-summary
 Type=simple
 User=audituser
 Group=audituser
-WorkingDirectory=/home/audituser/xray_audit
-EnvironmentFile=-/etc/xray-audit.env
+WorkingDirectory=/opt/xray-audit/current
+EnvironmentFile=/etc/xray-audit/xray-audit.env
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/audituser/xray_audit/.venv/bin/python -m xray_audit.ai_summary
+ExecStart=/opt/xray-audit/current/venv/bin/xray-audit-ai-summary
 Restart=always
 RestartSec=3
 StartLimitIntervalSec=0

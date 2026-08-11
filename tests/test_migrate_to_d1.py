@@ -52,12 +52,11 @@ class InterruptingGateway(StubGateway):
 
 def test_table_selection_always_uses_fk_safe_canonical_order() -> None:
     names = [spec.name for spec in TABLE_SPECS]
-    assert len(names) == 11
-    assert names.index("audit_raw_events") < names.index("audit_access_events")
-    assert names.index("audit_raw_events") < names.index("audit_dns_events")
-    assert [spec.name for spec in select_tables(["audit_dns_events,audit_raw_events"])] == [
-        "audit_raw_events",
-        "audit_dns_events",
+    assert len(names) == 8
+    assert names[0] == "audit_access_events"
+    assert [spec.name for spec in select_tables(["audit_access_events,audit_job_state"])] == [
+        "audit_access_events",
+        "audit_job_state",
     ]
 
 
@@ -102,7 +101,7 @@ def test_resume_handles_string_primary_keys_and_checkpoints_each_chunk(tmp_path:
 
 
 def test_dry_run_does_not_call_gateway_or_write_resume(tmp_path: Path) -> None:
-    spec = TableSpec("audit_raw_events", "id", ("id",))
+    spec = TableSpec("audit_access_events", "id", ("id",))
     source = StubSource(rows=[{"id": 1}, {"id": 2}])
     resume = tmp_path / "resume.json"
     MigrationRunner(source, None, 1, resume, dry_run=True, output=lambda _: None).migrate((spec,))
@@ -110,7 +109,7 @@ def test_dry_run_does_not_call_gateway_or_write_resume(tmp_path: Path) -> None:
 
 
 def test_resume_preserves_numeric_primary_key_type(tmp_path: Path) -> None:
-    spec = TableSpec("audit_raw_events", "id", ("id",))
+    spec = TableSpec("audit_access_events", "id", ("id",))
     resume = tmp_path / "resume.json"
     MigrationRunner(
         StubSource(rows=[{"id": 10}, {"id": 20}]),
@@ -126,7 +125,7 @@ def test_resume_preserves_numeric_primary_key_type(tmp_path: Path) -> None:
 
 
 def test_resume_continues_after_last_accepted_chunk(tmp_path: Path) -> None:
-    spec = TableSpec("audit_raw_events", "id", ("id",))
+    spec = TableSpec("audit_access_events", "id", ("id",))
     source = StubSource(rows=[{"id": 1}, {"id": 2}, {"id": 3}])
     resume = tmp_path / "resume.json"
     gateway = InterruptingGateway()
@@ -164,17 +163,12 @@ def test_verification_reports_mismatch_and_returns_false() -> None:
 
 def test_large_int64_values_are_serialized_as_decimal_strings() -> None:
     large = 2**63 - 1
-    row = serialize_row({"id": large, "raw_event_id": large - 1, "inode": large - 2, "last_offset": large - 3})
-    assert row == {
-        "id": str(large),
-        "raw_event_id": str(large - 1),
-        "inode": str(large - 2),
-        "last_offset": str(large - 3),
-    }
+    row = serialize_row({"id": large, "inode": large - 2, "last_offset": large - 3})
+    assert row == {"id": str(large), "inode": str(large - 2), "last_offset": str(large - 3)}
 
 
 def test_primary_key_bounds_limit_incremental_scan(tmp_path: Path) -> None:
-    spec = TableSpec("audit_raw_events", "id", ("id",))
+    spec = TableSpec("audit_access_events", "id", ("id",))
     source = StubSource(rows=[{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}])
     gateway = StubGateway()
     MigrationRunner(
@@ -184,7 +178,7 @@ def test_primary_key_bounds_limit_incremental_scan(tmp_path: Path) -> None:
     imported = gateway.calls[0][1]["rows"]
     assert imported == [{"id": "2"}, {"id": "3"}]
     assert source.fetches[0] == (spec.name, 1, 50, 3)
-    assert parse_pk_bounds(["audit_raw_events=9007199254740993", "audit_job_state=cursor"]) == {
-        "audit_raw_events": 9007199254740993,
+    assert parse_pk_bounds(["audit_access_events=9007199254740993", "audit_job_state=cursor"]) == {
+        "audit_access_events": 9007199254740993,
         "audit_job_state": "cursor",
     }
