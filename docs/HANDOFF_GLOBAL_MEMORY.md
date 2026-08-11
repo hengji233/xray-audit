@@ -1,11 +1,18 @@
 # Xray Audit Global Handoff Memory
 
 ## Snapshot Baseline
-- Last updated (UTC): 2026-07-21T00:00:00Z
-- Scope: standalone Xray audit stack (Python + MySQL or Cloudflare D1 + optional Redis + Vue3)
-- Canonical repository: `zcl19/xray-audit`
+- Last updated (UTC): 2026-07-24T00:00:00Z
+- Scope: standalone Xray audit stack (default memory; optional MySQL, Cloudflare D1, Redis; Vue3)
+- Canonical repository: `hengji233/xray-audit`
 - Core goal: user-level access/error audit with near-real-time dashboard and searchable history
-- Deployment topology: reverse proxy -> FastAPI (`127.0.0.1:8088`) -> MySQL, or authenticated Worker gateway -> D1
+- Deployment topology: reverse proxy -> one FastAPI service with embedded collector (`127.0.0.1:8088`) -> selected storage
+
+## Long-Term Requirements
+1. Remain independently deployable without Xray source changes.
+2. Use release wheels and systemd as the primary host installation path.
+3. Default fresh installation to memory and never install/initialize SQL.
+4. Default to one API process with embedded collection.
+5. Use checksummed artifacts, immutable versions, atomic `current`, health checks, and rollback.
 
 ## Architecture And Responsibilities
 - `xray_audit.collector_runner`
@@ -29,12 +36,10 @@
 
 ## Runtime Data Model
 - Access pipeline:
-  - `audit_raw_events`
-  - `audit_access_events`
-  - `audit_dns_events`
+  - `audit_access_events` (parsed access fields only, 30-day retention)
 - Error pipeline:
-  - `audit_error_events`
-  - `audit_job_state`
+  - bounded process-local ring buffer (never persisted)
+  - `audit_job_state` for auxiliary job cursors only
 - Runtime support:
   - `collector_state`
   - `audit_ip_geo_cache`
@@ -69,6 +74,11 @@
   - `GET /api/v1/metrics`
 
 ## Operational Commands
+- Standard installation:
+  - `sudo ./scripts/install.sh --version vX.Y.Z --unattended`
+- Service verification:
+  - `systemctl status xray-audit-api --no-pager`
+  - `curl -fsS http://127.0.0.1:8088/api/v1/health`
 - Install and bootstrap:
   - `python3 -m venv .venv`
   - `source .venv/bin/activate`
@@ -88,6 +98,8 @@
   - see `docs/MYSQL_TO_D1_MIGRATION.md`
 
 ## Known Risks And Gotchas
+- Memory audit events are intentionally process-local and disappear on restart; only control-plane state persists locally.
+- MySQL/D1 activation tests connectivity but does not yet apply schema migrations automatically.
 - Under extreme load, Xray logging may drop lines.
 - If disk usage reaches 100%, Redis persistence can fail and block writes.
 - If collector is not managed by systemd/compose restart policy, crashes can stop ingestion.
@@ -100,7 +112,7 @@
   - UI date-range input is local time.
   - API query timestamps are normalized to UTC ISO strings.
 - Sensitivity policy:
-  - partial masking only; no plaintext secrets in docs.
+  - no real host/IP/domain or plaintext secrets in docs; use reserved placeholders.
 - Release policy:
   - version tags for production, avoid unpinned `latest` in fixed environments.
 
@@ -115,3 +127,19 @@
   - standalone-public packaging baseline added (`docker`, GHCR release workflow, compatibility contract docs)
 - 2026-07-21
   - selectable MySQL/D1 storage documented with D1 deployment, migration, CI, security, and cost guidance
+- 2026-07-24
+  - wheel/systemd installer, release assets, memory-first deployment architecture, and recovery protocol documented
+- 2026-07-28
+  - primary node deployment verified with memory audit buffers, local control persistence, and restart-safe collector cursors
+- 2026-07-30
+  - production D1 gateway, schema, encrypted application configuration, and end-to-end persistent ingestion verified
+- 2026-07-31
+  - D1 query plans, index write amplification, and dashboard polling optimized from production measurements
+
+## Recovery Protocol
+1. Read `AI_CONTEXT.md`, this file, the relevant node memory, and `MEMORY_INDEX.json`.
+2. Validate JSON and inspect the worktree without discarding unowned changes.
+3. Reconfirm all five long-term requirements.
+4. Inspect systemd, `/opt/xray-audit/current`, version directories, and protected configuration without transcribing secrets.
+5. Verify loopback health before and after changes; atomically restore the previous release on failure.
+6. Update global memory, node memory, and the index after a completed milestone.

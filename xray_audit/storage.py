@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -72,155 +71,59 @@ class MySQLIngestor:
         self.conn.commit()
 
     def ingest_events(self, events: List[ParsedEvent], node_id: str) -> Dict[str, int]:
-        if not events:
+        access_events = [ev for ev in events if ev.access is not None]
+        if not access_events:
             return {"raw": 0, "access": 0, "dns": 0}
 
         self._ensure_conn()
-        raw_count = 0
-        access_count = 0
-        dns_count = 0
-
         try:
             with self.conn.cursor() as cur:
-                for ev in events:
-                    cur.execute(
-                        """
-                        INSERT INTO audit_raw_events(event_time, event_type, raw_line, raw_hash, node_id, ingested_at)
-                        VALUES(%s, %s, %s, %s, %s, NOW(6))
-                        ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), raw_line=VALUES(raw_line)
-                        """,
-                        (ev.event_time, ev.event_type, ev.raw_line, ev.raw_hash, node_id),
-                    )
-                    raw_id = int(cur.lastrowid)
-                    raw_count += 1
-
-                    if ev.access is not None:
-                        a = ev.access
-                        cur.execute(
-                            """
-                            INSERT INTO audit_access_events(
-                                raw_event_id, event_time, user_email, src, dest_raw, dest_host, dest_port,
-                                status, detour, reason, is_domain, confidence
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON DUPLICATE KEY UPDATE
-                                user_email=VALUES(user_email),
-                                src=VALUES(src),
-                                dest_raw=VALUES(dest_raw),
-                                dest_host=VALUES(dest_host),
-                                dest_port=VALUES(dest_port),
-                                status=VALUES(status),
-                                detour=VALUES(detour),
-                                reason=VALUES(reason),
-                                is_domain=VALUES(is_domain),
-                                confidence=VALUES(confidence)
-                            """,
-                            (
-                                raw_id,
-                                a.event_time,
-                                a.user_email,
-                                a.src,
-                                a.dest_raw,
-                                a.dest_host,
-                                a.dest_port,
-                                a.status,
-                                a.detour,
-                                a.reason,
-                                1 if a.is_domain else 0,
-                                a.confidence,
-                            ),
+                cur.executemany(
+                    """
+                    INSERT INTO audit_access_events(
+                        event_time, user_email, src, dest_host, dest_port, protocol,
+                        status, detour, reason, is_domain, node_id, event_hash
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        user_email=VALUES(user_email),
+                        src=VALUES(src),
+                        dest_host=VALUES(dest_host),
+                        dest_port=VALUES(dest_port),
+                        protocol=VALUES(protocol),
+                        status=VALUES(status),
+                        detour=VALUES(detour),
+                        reason=VALUES(reason),
+                        is_domain=VALUES(is_domain)
+                    """,
+                    [
+                        (
+                            ev.access.event_time,
+                            ev.access.user_email,
+                            ev.access.src,
+                            ev.access.dest_host,
+                            ev.access.dest_port,
+                            ev.access.dest_raw.split(":", 1)[0]
+                            if ev.access.dest_raw.startswith(("tcp:", "udp:"))
+                            else "",
+                            ev.access.status,
+                            ev.access.detour,
+                            ev.access.reason,
+                            1 if ev.access.is_domain else 0,
+                            node_id,
+                            bytes.fromhex(ev.raw_hash[:32]),
                         )
-                        access_count += 1
-                    elif ev.dns is not None:
-                        d = ev.dns
-                        cur.execute(
-                            """
-                            INSERT INTO audit_dns_events(
-                                raw_event_id, event_time, dns_server, domain, ips_json, dns_status, elapsed_ms, error_text
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            ON DUPLICATE KEY UPDATE
-                                dns_server=VALUES(dns_server),
-                                domain=VALUES(domain),
-                                ips_json=VALUES(ips_json),
-                                dns_status=VALUES(dns_status),
-                                elapsed_ms=VALUES(elapsed_ms),
-                                error_text=VALUES(error_text)
-                            """,
-                            (
-                                raw_id,
-                                d.event_time,
-                                d.dns_server,
-                                d.domain,
-                                d.ips_json,
-                                d.dns_status,
-                                d.elapsed_ms,
-                                d.error_text,
-                            ),
-                        )
-                        dns_count += 1
+                        for ev in access_events
+                    ],
+                )
             self.conn.commit()
         except Exception:
             self.conn.rollback()
             raise
 
-        return {"raw": raw_count, "access": access_count, "dns": dns_count}
+        return {"raw": 0, "access": len(access_events), "dns": 0}
 
     def ingest_error_events(self, events: List[ParsedErrorEvent], node_id: str) -> int:
-        if not events:
-            return 0
-
-        self._ensure_conn()
-        inserted = 0
-
-        try:
-            with self.conn.cursor() as cur:
-                for ev in events:
-                    cur.execute(
-                        """
-                        INSERT INTO audit_error_events(
-                            event_time, level, session_id, component, message,
-                            src, dest_raw, dest_host, dest_port, category,
-                            signature_hash, is_noise, raw_line, raw_hash, node_id, ingested_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(6))
-                        ON DUPLICATE KEY UPDATE
-                            level=VALUES(level),
-                            session_id=VALUES(session_id),
-                            component=VALUES(component),
-                            message=VALUES(message),
-                            src=VALUES(src),
-                            dest_raw=VALUES(dest_raw),
-                            dest_host=VALUES(dest_host),
-                            dest_port=VALUES(dest_port),
-                            category=VALUES(category),
-                            signature_hash=VALUES(signature_hash),
-                            is_noise=VALUES(is_noise),
-                            raw_line=VALUES(raw_line),
-                            ingested_at=NOW(6)
-                        """,
-                        (
-                            ev.event_time,
-                            ev.level,
-                            ev.session_id,
-                            ev.component,
-                            ev.message,
-                            ev.src,
-                            ev.dest_raw,
-                            ev.dest_host,
-                            ev.dest_port,
-                            ev.category,
-                            ev.signature_hash,
-                            1 if ev.is_noise else 0,
-                            ev.raw_line,
-                            ev.raw_hash,
-                            node_id,
-                        ),
-                    )
-                    inserted += 1
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-
-        return inserted
+        return 0
 
     def prune_old_events(self, retention_days: int, delete_batch_size: int) -> int:
         if retention_days <= 0 or delete_batch_size <= 0:
@@ -229,117 +132,34 @@ class MySQLIngestor:
         self._ensure_conn()
         total_deleted = 0
 
-        while True:
-            try:
-                with self.conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        DELETE FROM audit_raw_events
+        for table in ("audit_access_events", "audit_auth_events"):
+            while True:
+                try:
+                    with self.conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                        DELETE FROM {table}
                         WHERE id IN (
                             SELECT id FROM (
                                 SELECT id
-                                FROM audit_raw_events
+                                FROM {table}
                                 WHERE event_time < (NOW(6) - INTERVAL %s DAY)
                                 ORDER BY id
                                 LIMIT %s
                             ) t
                         )
                         """,
-                        (retention_days, delete_batch_size),
-                    )
-                    deleted = int(cur.rowcount)
-                self.conn.commit()
-            except Exception:
-                self.conn.rollback()
-                raise
-
-            total_deleted += deleted
-            if deleted < delete_batch_size:
-                break
-
-        while True:
-            try:
-                with self.conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        DELETE FROM audit_error_events
-                        WHERE id IN (
-                            SELECT id FROM (
-                                SELECT id
-                                FROM audit_error_events
-                                WHERE event_time < (NOW(6) - INTERVAL %s DAY)
-                                ORDER BY id
-                                LIMIT %s
-                            ) t
+                            (retention_days, delete_batch_size),
                         )
-                        """,
-                        (retention_days, delete_batch_size),
-                    )
-                    deleted = int(cur.rowcount)
-                self.conn.commit()
-            except Exception:
-                self.conn.rollback()
-                raise
+                        deleted = int(cur.rowcount)
+                    self.conn.commit()
+                except Exception:
+                    self.conn.rollback()
+                    raise
 
-            total_deleted += deleted
-            if deleted < delete_batch_size:
-                break
-
-        while True:
-            try:
-                with self.conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        DELETE FROM audit_auth_events
-                        WHERE id IN (
-                            SELECT id FROM (
-                                SELECT id
-                                FROM audit_auth_events
-                                WHERE event_time < (NOW(6) - INTERVAL %s DAY)
-                                ORDER BY id
-                                LIMIT %s
-                            ) t
-                        )
-                        """,
-                        (retention_days, delete_batch_size),
-                    )
-                    deleted = int(cur.rowcount)
-                self.conn.commit()
-            except Exception:
-                self.conn.rollback()
-                raise
-
-            total_deleted += deleted
-            if deleted < delete_batch_size:
-                break
-
-        while True:
-            try:
-                with self.conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        DELETE FROM audit_runtime_config_history
-                        WHERE id IN (
-                            SELECT id FROM (
-                                SELECT id
-                                FROM audit_runtime_config_history
-                                WHERE changed_at < (NOW(6) - INTERVAL %s DAY)
-                                ORDER BY id
-                                LIMIT %s
-                            ) t
-                        )
-                        """,
-                        (retention_days, delete_batch_size),
-                    )
-                    deleted = int(cur.rowcount)
-                self.conn.commit()
-            except Exception:
-                self.conn.rollback()
-                raise
-
-            total_deleted += deleted
-            if deleted < delete_batch_size:
-                break
+                total_deleted += deleted
+                if deleted < delete_batch_size:
+                    break
 
         return total_deleted
 
@@ -513,32 +333,11 @@ class AuditQueryService:
             cur.execute(
                 """
                 SELECT
-                    r.id,
-                    r.event_time,
-                    r.event_type,
-                    r.raw_line,
-                    r.node_id,
-                    a.user_email,
-                    a.src,
-                    a.dest_raw,
-                    a.dest_host,
-                    a.dest_port,
-                    a.status,
-                    a.detour,
-                    a.reason,
-                    a.is_domain,
-                    a.confidence,
-                    d.dns_server,
-                    d.domain,
-                    d.ips_json,
-                    d.dns_status,
-                    d.elapsed_ms,
-                    d.error_text
-                FROM audit_raw_events r
-                LEFT JOIN audit_access_events a ON a.raw_event_id = r.id
-                LEFT JOIN audit_dns_events d ON d.raw_event_id = r.id
-                WHERE r.event_time >= (NOW(6) - INTERVAL %s SECOND)
-                ORDER BY r.event_time DESC, r.id DESC
+                    id, event_time, user_email, src, dest_host, dest_port,
+                    protocol, status, detour, reason, is_domain, node_id
+                FROM audit_access_events
+                WHERE event_time >= (NOW(6) - INTERVAL %s SECOND)
+                ORDER BY event_time DESC, id DESC
                 LIMIT %s
                 """,
                 (seconds, limit),
@@ -550,17 +349,8 @@ class AuditQueryService:
             cur.execute(
                 """
                 SELECT
-                    event_time,
-                    user_email,
-                    src,
-                    dest_raw,
-                    dest_host,
-                    dest_port,
-                    status,
-                    detour,
-                    reason,
-                    is_domain,
-                    confidence
+                    id, event_time, user_email, src, dest_host, dest_port,
+                    protocol, status, detour, reason, is_domain, node_id
                 FROM audit_access_events
                 WHERE user_email = %s
                     AND event_time >= %s
@@ -591,17 +381,8 @@ class AuditQueryService:
             cur.execute(
                 """
                 SELECT
-                    event_time,
-                    user_email,
-                    src,
-                    dest_raw,
-                    dest_host,
-                    dest_port,
-                    status,
-                    detour,
-                    reason,
-                    is_domain,
-                    confidence
+                    id, event_time, user_email, src, dest_host, dest_port,
+                    protocol, status, detour, reason, is_domain, node_id
                 FROM audit_access_events
                 WHERE user_email = %s
                     AND event_time >= %s
@@ -625,36 +406,31 @@ class AuditQueryService:
         page: int,
         page_size: int,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        filters: List[str] = ["r.event_type = %s", "r.event_time >= %s", "r.event_time <= %s"]
-        params: List[Any] = ["access", dt_from, dt_to]
+        filters: List[str] = ["event_time >= %s", "event_time <= %s"]
+        params: List[Any] = [dt_from, dt_to]
 
         if email:
-            filters.append("a.user_email = %s")
+            filters.append("user_email = %s")
             params.append(email)
         if dest_host:
-            filters.append("a.dest_host LIKE %s")
+            filters.append("dest_host LIKE %s")
             params.append(f"%{dest_host}%")
         if status:
-            filters.append("a.status = %s")
+            filters.append("status = %s")
             params.append(status)
         if detour:
-            filters.append("a.detour LIKE %s")
+            filters.append("detour LIKE %s")
             params.append(f"%{detour}%")
         if is_domain is not None:
-            filters.append("a.is_domain = %s")
+            filters.append("is_domain = %s")
             params.append(1 if is_domain else 0)
 
         where_sql = " AND ".join(filters)
-        joins_sql = """
-            FROM audit_raw_events r
-            LEFT JOIN audit_access_events a ON a.raw_event_id = r.id
-            LEFT JOIN audit_dns_events d ON d.raw_event_id = r.id
-        """
         offset = (page - 1) * page_size
 
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute(
-                f"SELECT COUNT(*) AS total {joins_sql} WHERE {where_sql}",
+                f"SELECT COUNT(*) AS total FROM audit_access_events WHERE {where_sql}",
                 tuple(params),
             )
             total = int(cur.fetchone()["total"])
@@ -662,30 +438,11 @@ class AuditQueryService:
             cur.execute(
                 f"""
                 SELECT
-                    r.id,
-                    r.event_time,
-                    r.event_type,
-                    r.raw_line,
-                    r.node_id,
-                    a.user_email,
-                    a.src,
-                    a.dest_raw,
-                    a.dest_host,
-                    a.dest_port,
-                    a.status,
-                    a.detour,
-                    a.reason,
-                    a.is_domain,
-                    a.confidence,
-                    d.dns_server,
-                    d.domain,
-                    d.ips_json,
-                    d.dns_status,
-                    d.elapsed_ms,
-                    d.error_text
-                {joins_sql}
+                    id, event_time, user_email, src, dest_host, dest_port,
+                    protocol, status, detour, reason, is_domain, node_id
+                FROM audit_access_events
                 WHERE {where_sql}
-                ORDER BY r.event_time DESC, r.id DESC
+                ORDER BY event_time DESC, id DESC
                 LIMIT %s OFFSET %s
                 """,
                 tuple(params + [page_size, offset]),
@@ -778,191 +535,26 @@ class AuditQueryService:
         page: int,
         page_size: int,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        filters: List[str] = ["event_time >= %s", "event_time <= %s"]
-        params: List[Any] = [dt_from, dt_to]
-
-        if level:
-            filters.append("level = %s")
-            params.append(level)
-        if category:
-            filters.append("category = %s")
-            params.append(category)
-        if not include_noise:
-            filters.append("is_noise = 0")
-
-        offset = (page - 1) * page_size
-
-        def _run_query(extra_filter: str | None, extra_params: List[Any]) -> Tuple[int, List[Dict[str, Any]]]:
-            where_parts = list(filters)
-            query_params: List[Any] = list(params)
-            if extra_filter:
-                where_parts.append(extra_filter)
-                query_params.extend(extra_params)
-            where_sql = " AND ".join(where_parts)
-            with self._conn() as conn, conn.cursor() as cur:
-                cur.execute(f"SELECT COUNT(*) AS total FROM audit_error_events WHERE {where_sql}", tuple(query_params))
-                total = int(cur.fetchone()["total"])
-                cur.execute(
-                    f"""
-                    SELECT
-                        id,
-                        event_time,
-                        level,
-                        session_id,
-                        component,
-                        message,
-                        src,
-                        dest_raw,
-                        dest_host,
-                        dest_port,
-                        category,
-                        signature_hash,
-                        is_noise,
-                        node_id
-                    FROM audit_error_events
-                    WHERE {where_sql}
-                    ORDER BY event_time DESC, id DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    tuple(query_params + [page_size, offset]),
-                )
-                return total, list(cur.fetchall())
-
-        if not keyword:
-            return _run_query(None, [])
-
-        keyword_raw = keyword.strip()
-        if not keyword_raw:
-            return _run_query(None, [])
-
-        fulltext_query = _to_fulltext_query(keyword_raw)
-        if fulltext_query:
-            try:
-                total, rows = _run_query(
-                    "MATCH(component, message, src, dest_raw) AGAINST (%s IN BOOLEAN MODE)",
-                    [fulltext_query],
-                )
-                if total > 0:
-                    return total, rows
-            except pymysql.MySQLError:
-                # Fallback to LIKE when FULLTEXT index is unavailable.
-                pass
-
-        kw = f"%{keyword_raw}%"
-        return _run_query(
-            "(component LIKE %s OR message LIKE %s OR src LIKE %s OR dest_raw LIKE %s)",
-            [kw, kw, kw, kw],
-        )
+        return 0, []
 
     def error_summary_stats(self, window_seconds: int) -> Dict[str, Any]:
-        with self._conn() as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN level = 'error' THEN 1 ELSE 0 END) AS error_count,
-                    SUM(CASE WHEN level = 'warning' THEN 1 ELSE 0 END) AS warning_count,
-                    SUM(CASE WHEN level = 'info' THEN 1 ELSE 0 END) AS info_count,
-                    SUM(CASE WHEN is_noise = 1 THEN 1 ELSE 0 END) AS noise_count
-                FROM audit_error_events
-                WHERE event_time >= (NOW(6) - INTERVAL %s SECOND)
-                """,
-                (window_seconds,),
-            )
-            row = cur.fetchone()
-
-            cur.execute(
-                """
-                SELECT category, COUNT(*) AS hits
-                FROM audit_error_events
-                WHERE event_time >= (NOW(6) - INTERVAL %s SECOND)
-                GROUP BY category
-                ORDER BY hits DESC
-                LIMIT 10
-                """,
-                (window_seconds,),
-            )
-            top_categories = list(cur.fetchall())
-
-        total = int(row["total"] or 0)
         return {
-            "total": total,
-            "error_count": int(row["error_count"] or 0),
-            "warning_count": int(row["warning_count"] or 0),
-            "info_count": int(row["info_count"] or 0),
-            "noise_count": int(row["noise_count"] or 0),
-            "top_categories": top_categories,
+            "total": 0,
+            "error_count": 0,
+            "warning_count": 0,
+            "info_count": 0,
+            "noise_count": 0,
+            "top_categories": [],
         }
 
     def error_summary_payload(self, dt_from: datetime, dt_to: datetime, max_items: int) -> Dict[str, Any]:
-        with self._conn() as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    level,
-                    category,
-                    COUNT(*) AS hits
-                FROM audit_error_events
-                WHERE event_time > %s AND event_time <= %s
-                GROUP BY level, category
-                ORDER BY hits DESC
-                LIMIT %s
-                """,
-                (dt_from, dt_to, max_items),
-            )
-            level_category = list(cur.fetchall())
-
-            cur.execute(
-                """
-                SELECT
-                    category,
-                    signature_hash,
-                    COUNT(*) AS hits,
-                    MAX(event_time) AS latest_time,
-                    MIN(level) AS min_level,
-                    MAX(level) AS max_level,
-                    ANY_VALUE(component) AS component,
-                    ANY_VALUE(message) AS sample_message
-                FROM audit_error_events
-                WHERE event_time > %s AND event_time <= %s
-                GROUP BY category, signature_hash
-                ORDER BY hits DESC
-                LIMIT %s
-                """,
-                (dt_from, dt_to, max_items),
-            )
-            signatures = list(cur.fetchall())
-
-            cur.execute(
-                """
-                SELECT
-                    event_time, level, category, component, message, src, dest_raw
-                FROM audit_error_events
-                WHERE event_time > %s AND event_time <= %s
-                ORDER BY event_time DESC, id DESC
-                LIMIT %s
-                """,
-                (dt_from, dt_to, max_items),
-            )
-            recent_examples = list(cur.fetchall())
-
-            cur.execute(
-                """
-                SELECT COUNT(*) AS total
-                FROM audit_error_events
-                WHERE event_time > %s AND event_time <= %s
-                """,
-                (dt_from, dt_to),
-            )
-            total = int(cur.fetchone()["total"] or 0)
-
         return {
             "from": dt_from,
             "to": dt_to,
-            "total": total,
-            "level_category": level_category,
-            "top_signatures": signatures,
-            "recent_examples": recent_examples,
+            "total": 0,
+            "level_category": [],
+            "top_signatures": [],
+            "recent_examples": [],
         }
 
     def job_state_get(self, key: str) -> Optional[str]:
@@ -1091,19 +683,3 @@ def apply_schema(settings: Settings, schema_path: str) -> None:
         conn.commit()
     finally:
         conn.close()
-
-
-def _to_fulltext_query(raw: str) -> str:
-    tokens = [t.strip() for t in re.split(r"\s+", raw) if t.strip()]
-    prepared: List[str] = []
-    for token in tokens:
-        safe = re.sub(r"[^\w\.\-:]+", "", token)
-        if len(safe) < 2:
-            continue
-        prepared.append(f"+{safe}*")
-        if len(prepared) >= 8:
-            break
-    if prepared:
-        return " ".join(prepared)
-    safe = re.sub(r"[^\w\.\-:]+", "", raw.strip())
-    return f"+{safe}*" if len(safe) >= 2 else ""

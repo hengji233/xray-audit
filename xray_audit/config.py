@@ -102,7 +102,13 @@ class Settings:
     admin_bootstrap_username: str
     admin_bootstrap_password: str
 
-    storage_backend: str = "mysql"
+    storage_backend: str = "memory"
+    data_dir: str = ""
+    control_db_path: str = ":memory:"
+    control_key: str = ""
+    memory_max_access_events: int = 1000
+    memory_max_error_events: int = 200
+    memory_max_dns_events: int = 200
     d1_gateway_url: str = ""
     d1_gateway_token: str = ""
     d1_timeout_seconds: float = 10.0
@@ -131,17 +137,28 @@ class Settings:
             mysql_password=os.getenv("AUDIT_MYSQL_PASSWORD", "change-me"),
             mysql_db=os.getenv("AUDIT_MYSQL_DB", "xray_audit"),
             mysql_charset=os.getenv("AUDIT_MYSQL_CHARSET", "utf8mb4"),
-            storage_backend=os.getenv("AUDIT_STORAGE_BACKEND", "mysql").strip().lower(),
+            storage_backend=os.getenv("AUDIT_STORAGE_BACKEND", "memory").strip().lower(),
+            data_dir=os.getenv("AUDIT_DATA_DIR", "").strip(),
+            control_db_path=os.getenv("AUDIT_CONTROL_DB_PATH", "").strip()
+            or (
+                os.path.join(os.getenv("AUDIT_DATA_DIR", "").strip(), "control.db")
+                if os.getenv("AUDIT_DATA_DIR", "").strip()
+                else ":memory:"
+            ),
+            control_key=os.getenv("AUDIT_CONTROL_KEY", "").strip(),
+            memory_max_access_events=int(os.getenv("AUDIT_MEMORY_MAX_ACCESS_EVENTS", "1000")),
+            memory_max_error_events=int(os.getenv("AUDIT_MEMORY_MAX_ERROR_EVENTS", "200")),
+            memory_max_dns_events=int(os.getenv("AUDIT_MEMORY_MAX_DNS_EVENTS", "200")),
             d1_gateway_url=os.getenv("AUDIT_D1_GATEWAY_URL", "").strip(),
             d1_gateway_token=os.getenv("AUDIT_D1_GATEWAY_TOKEN", "").strip(),
             d1_timeout_seconds=float(os.getenv("AUDIT_D1_TIMEOUT_SECONDS", "10")),
             d1_batch_size=int(os.getenv("AUDIT_D1_BATCH_SIZE", "50")),
             d1_max_retries=int(os.getenv("AUDIT_D1_MAX_RETRIES", "3")),
             redis_url=os.getenv("AUDIT_REDIS_URL", "redis://127.0.0.1:6379/0"),
-            redis_enabled=_env_bool("AUDIT_REDIS_ENABLED", True),
+            redis_enabled=_env_bool("AUDIT_REDIS_ENABLED", False),
             api_host=os.getenv("AUDIT_API_HOST", "127.0.0.1"),
             api_port=int(os.getenv("AUDIT_API_PORT", "8088")),
-            collector_embedded=_env_bool("AUDIT_COLLECTOR_EMBEDDED", False),
+            collector_embedded=_env_bool("AUDIT_COLLECTOR_EMBEDDED", True),
             drop_api_to_api=_env_bool("AUDIT_DROP_API_TO_API", True),
             drop_loopback_traffic=_env_bool("AUDIT_DROP_LOOPBACK_TRAFFIC", True),
             drop_invalid_vless_probe=_env_bool("AUDIT_DROP_INVALID_VLESS_PROBE", False),

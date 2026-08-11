@@ -1,25 +1,16 @@
 export interface AccessEventRow {
   id?: number;
   event_time: string;
-  event_type: string;
-  raw_line: string;
   node_id?: string;
   user_email?: string;
   src?: string;
-  dest_raw?: string;
   dest_host?: string;
   dest_port?: number | null;
+  protocol?: string;
   status?: string;
   detour?: string;
   reason?: string;
   is_domain?: number | boolean;
-  confidence?: string;
-  dns_server?: string;
-  domain?: string;
-  ips_json?: string;
-  dns_status?: string;
-  elapsed_ms?: number | null;
-  error_text?: string;
 }
 
 export interface HealthResponse {
@@ -45,6 +36,7 @@ export interface QueryResponse<T> {
   page: number;
   page_size: number;
   items: T[];
+  persistent?: boolean;
 }
 
 export interface SummaryStats {
@@ -115,6 +107,7 @@ export interface ErrorSummary {
   info_count: number;
   noise_count: number;
   top_categories: ErrorCategoryHit[];
+  persistent?: boolean;
 }
 
 export interface AuthMe {
@@ -154,4 +147,50 @@ export interface RuntimeConfigHistoryItem {
   changed_by: string;
   source_ip: string;
   changed_at: string;
+}
+
+export type StorageBackend = "memory" | "mysql" | "d1";
+
+export interface StorageConnectionConfig {
+  mysql_host: string;
+  mysql_port: number;
+  mysql_user: string;
+  mysql_db: string;
+  mysql_charset: string;
+  mysql_password?: string;
+  d1_gateway_url: string;
+  d1_timeout_seconds: number;
+  d1_batch_size: number;
+  d1_max_retries: number;
+  d1_gateway_token?: string;
+  mysql_password_configured: boolean;
+  d1_gateway_token_configured: boolean;
+}
+
+export interface StorageConfigPayload {
+  backend: StorageBackend;
+  config: Partial<StorageConnectionConfig>;
+}
+
+export interface StorageConfigResponse {
+  active_backend: StorageBackend;
+  pending_backend: StorageBackend | null;
+  status: unknown;
+  config: StorageConnectionConfig;
+  memory: Record<string, unknown>;
+}
+
+export interface StorageStatusResponse {
+  active_backend?: StorageBackend;
+  pending_backend?: StorageBackend | null;
+  status?: unknown;
+  memory?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface StorageActionResponse {
+  success?: boolean;
+  status?: unknown;
+  message?: string;
+  [key: string]: unknown;
 }

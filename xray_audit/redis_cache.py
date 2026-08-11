@@ -67,40 +67,28 @@ class RedisCache:
 
         with self.client.pipeline() as pipe:
             for ev in events:
+                if ev.access is None:
+                    continue
                 compact = {
                     "event_time": ev.event_time.isoformat(),
-                    "event_type": ev.event_type,
-                    "raw": ev.raw_line,
                 }
 
-                if ev.access is not None:
-                    a = ev.access
-                    compact.update(
-                        {
-                            "email": a.user_email,
-                            "dest_host": a.dest_host,
-                            "dest_raw": a.dest_raw,
-                            "status": a.status,
-                            "confidence": a.confidence,
-                        }
-                    )
+                a = ev.access
+                compact.update(
+                    {
+                        "email": a.user_email,
+                        "dest_host": a.dest_host,
+                        "protocol": a.dest_raw.split(":", 1)[0] if a.dest_raw.startswith(("tcp:", "udp:")) else "",
+                        "status": a.status,
+                    }
+                )
 
-                    if a.dest_host:
-                        pipe.zincrby(self._minute_bucket_key(ev.event_time), 1, a.dest_host)
-                        pipe.expire(self._minute_bucket_key(ev.event_time), 900)
+                if a.dest_host:
+                    pipe.zincrby(self._minute_bucket_key(ev.event_time), 1, a.dest_host)
+                    pipe.expire(self._minute_bucket_key(ev.event_time), 900)
 
-                    if a.user_email and a.user_email != "unknown":
-                        pipe.zadd(active_key, {a.user_email: int(ev.event_time.timestamp())})
-
-                if ev.dns is not None:
-                    d = ev.dns
-                    compact.update(
-                        {
-                            "dns_server": d.dns_server,
-                            "domain": d.domain,
-                            "dns_status": d.dns_status,
-                        }
-                    )
+                if a.user_email and a.user_email != "unknown":
+                    pipe.zadd(active_key, {a.user_email: int(ev.event_time.timestamp())})
 
                 pipe.lpush(recent_key, json.dumps(compact, ensure_ascii=True))
 

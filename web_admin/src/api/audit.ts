@@ -12,6 +12,10 @@ import type {
   RuntimeConfigCurrentItem,
   RuntimeConfigHistoryItem,
   RuntimeConfigSchemaItem,
+  StorageActionResponse,
+  StorageConfigPayload,
+  StorageConfigResponse,
+  StorageStatusResponse,
   SummaryStats,
   UserSummary,
 } from "@/types";
@@ -156,5 +160,30 @@ export async function getConfigHistory(
   const { data } = await client.get<QueryResponse<RuntimeConfigHistoryItem>>("/config/history", {
     params: { page, page_size },
   });
+  return data;
+}
+
+export async function getStorageConfig(): Promise<StorageConfigResponse> {
+  const { data } = await client.get<StorageConfigResponse>("/storage/config");
+  return data;
+}
+
+export async function updateStorageConfig(payload: StorageConfigPayload): Promise<StorageConfigResponse> {
+  const { data } = await client.put<StorageConfigResponse>("/storage/config", payload);
+  return data;
+}
+
+export async function testStorageConnection(payload: StorageConfigPayload): Promise<StorageActionResponse> {
+  const { data } = await client.post<StorageActionResponse>("/storage/test", payload);
+  return data;
+}
+
+export async function activateStorage(backend: StorageConfigPayload["backend"]): Promise<StorageActionResponse> {
+  const { data } = await client.post<StorageActionResponse>("/storage/activate", { backend });
+  return data;
+}
+
+export async function getStorageStatus(): Promise<StorageStatusResponse> {
+  const { data } = await client.get<StorageStatusResponse>("/storage/status");
   return data;
 }

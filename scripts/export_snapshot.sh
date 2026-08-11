@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TARGET_DIR="${1:-../xray-audit}"
-REPO_URL="${2:-git@github.com:zcl19/xray-audit.git}"
+REPO_URL="${2:-git@github.com:hengji233/xray-audit.git}"
 
 if [ ! -d "tools/xray_audit" ]; then
   echo "Run this script from Xray-core repository root."

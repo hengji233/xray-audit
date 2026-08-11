@@ -40,6 +40,10 @@ body {
   letter-spacing: 0.2px;
 }
 
+.persistence-notice {
+  margin-bottom: 14px;
+}
+
 .toolbar {
   display: flex;
   gap: 12px;

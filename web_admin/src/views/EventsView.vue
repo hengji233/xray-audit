@@ -27,7 +27,7 @@
         <el-button type="primary" :loading="loading" @click="fetchRows">Search</el-button>
         <el-button @click="resetFilters">Reset</el-button>
         <el-button @click="exportCsv">Export CSV</el-button>
-        <el-switch v-model="autoRefresh" inline-prompt active-text="Auto 3s" inactive-text="Manual" />
+        <el-switch v-model="autoRefresh" inline-prompt active-text="Auto 15s" inactive-text="Manual" />
       </div>
 
       <el-table :data="rows" border size="small" height="520">
@@ -41,6 +41,7 @@
         </el-table-column>
         <el-table-column prop="dest_host" label="Domain/Host" min-width="200" />
         <el-table-column prop="dest_port" label="Port" width="90" />
+        <el-table-column prop="protocol" label="Protocol" width="110" />
         <el-table-column prop="status" label="Status" width="100" />
         <el-table-column prop="detour" label="Detour" min-width="220" />
       </el-table>
@@ -82,7 +83,7 @@ const filters = reactive({
 });
 const rows = ref<AccessEventRow[]>([]);
 const loading = ref(false);
-const autoRefresh = ref(true);
+const autoRefresh = ref(false);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(50);
@@ -156,6 +157,7 @@ function exportCsv() {
     "src_geo",
     "dest_host",
     "dest_port",
+    "protocol",
     "status",
     "detour",
     "reason",
@@ -217,7 +219,7 @@ function startAutoRefresh() {
   stopAutoRefresh();
   timer = window.setInterval(() => {
     fetchRows(true);
-  }, 3000);
+  }, 15000);
 }
 
 watch(autoRefresh, (enabled) => {

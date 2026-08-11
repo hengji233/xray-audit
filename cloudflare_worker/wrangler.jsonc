@@ -5,8 +5,8 @@
   "compatibility_date": "2026-07-21",
   "d1_databases": [{
     "binding": "DB",
-    "database_name": "xray-audit",
-    "database_id": "replace-with-d1-id",
+    "database_name": "audit",
+    "database_id": "039e6957-ba89-46b8-bdae-d6078b20a44b",
     "migrations_dir": "migrations"
   }]
 }

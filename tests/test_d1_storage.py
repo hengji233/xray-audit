@@ -9,6 +9,7 @@ import pytest
 
 from xray_audit.config import Settings
 from xray_audit.d1_storage import D1Ingestor, D1QueryService, D1StorageError
+from xray_audit.memory_storage import MemoryStorage
 from xray_audit.models import AccessEvent, DNSEvent, ParsedErrorEvent, ParsedEvent
 from xray_audit.storage import AuditQueryService, MySQLIngestor
 from xray_audit.storage_factory import create_ingestor, create_query_service
@@ -116,7 +117,7 @@ def test_non_idempotent_operation_is_not_retried(monkeypatch: pytest.MonkeyPatch
     assert attempts == 1
 
 
-def test_ingestor_serializes_access_and_dns_events_and_returns_counters() -> None:
+def test_ingestor_serializes_only_access_events() -> None:
     requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -162,21 +163,24 @@ def test_ingestor_serializes_access_and_dns_events_and_returns_counters() -> Non
     ]
 
     ingestor = D1Ingestor(_settings(), _client(handler))
-    assert ingestor.ingest_events(events, "node-a") == {"raw": 2, "access": 1, "dns": 1}
+    assert ingestor.ingest_events(events, "node-a") == {"raw": 0, "access": 1, "dns": 0}
 
     body = json.loads(requests[0].read())
     assert body["node_id"] == "node-a"
     assert body["events"][0]["event_time"] == "2026-07-21T12:34:56.000789Z"
     assert body["events"][0]["access"]["is_domain"] is True
     assert body["events"][0]["access"]["dest_port"] == 443
-    assert body["events"][1]["dns"]["ips_json"] == ["203.0.113.1"]
+    assert body["events"][0]["access"]["protocol"] == "tcp"
+    assert body["events"][0]["event_hash"] == "a" * 64
+    assert "raw_line" not in body["events"][0]
+    assert len(body["events"]) == 1
 
 
-def test_ingestor_serializes_error_event_fields() -> None:
-    body = {}
+def test_ingestor_does_not_send_error_events() -> None:
+    requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        body.update(json.loads(request.read()))
+        requests.append(request)
         return httpx.Response(200, json={"ok": True, "data": {"count": 1}})
 
     event = ParsedErrorEvent(
@@ -197,28 +201,8 @@ def test_ingestor_serializes_error_event_fields() -> None:
     )
 
     ingestor = D1Ingestor(_settings(), _client(handler))
-    assert ingestor.ingest_error_events([event], "node-a") == 1
-    assert body == {
-        "events": [
-            {
-                "event_time": "2026-07-21T12:00:00.000000Z",
-                "level": "warning",
-                "session_id": 42,
-                "component": "proxy/vless",
-                "message": "connection failed",
-                "src": "1.2.3.4:5000",
-                "dest_raw": "tcp:example.com:443",
-                "dest_host": "example.com",
-                "dest_port": 443,
-                "category": "network",
-                "signature_hash": "c" * 64,
-                "is_noise": True,
-                "raw_line": "warning line",
-                "raw_hash": "d" * 64,
-            }
-        ],
-        "node_id": "node-a",
-    }
+    assert ingestor.ingest_error_events([event], "node-a") == 0
+    assert requests == []
 
 
 def test_collector_state_uses_decimal_strings_for_int64_values() -> None:
@@ -244,12 +228,12 @@ def test_collector_state_uses_decimal_strings_for_int64_values() -> None:
     }
 
 
-def test_factory_selects_mysql_by_default_and_d1_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_selects_memory_by_default_and_d1_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings.from_env()
     monkeypatch.setattr(MySQLIngestor, "__init__", lambda self, _: None)
 
-    assert isinstance(create_ingestor(settings), MySQLIngestor)
-    assert isinstance(create_query_service(settings), AuditQueryService)
+    assert isinstance(create_ingestor(settings), MemoryStorage)
+    assert isinstance(create_query_service(settings), MemoryStorage)
 
     d1_settings = _settings()
     assert isinstance(create_ingestor(d1_settings), D1Ingestor)

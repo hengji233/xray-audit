@@ -8,7 +8,7 @@ This repository is designed to be published independently from Xray-core. It con
 
 - Tails Xray access/error logs
 - Parses access, DNS, and error events
-- Stores structured events in MySQL or Cloudflare D1 through an authenticated Worker gateway
+- Stores structured events in memory by default, or in explicitly configured MySQL/Cloudflare D1 storage
 - Caches realtime aggregates in Redis
 - Serves APIs and Vue3 admin dashboard with FastAPI
 
@@ -22,6 +22,27 @@ This repository is designed to be published independently from Xray-core. It con
 - `cloudflare_worker/`: authenticated D1 storage gateway and D1 schema migrations
 - `docs/`: handoff memory, SOP, compatibility contract
 - `tests/`: backend tests
+
+## Host Install (Wheel + systemd)
+
+The intended fresh-host path is a release wheel, a versioned venv, and one
+systemd API service with embedded collection:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/hengji233/xray-audit/main/scripts/install.sh
+sudo bash install.sh --version v0.2.0 --unattended
+```
+
+The installer verifies the wheel against release `SHA256SUMS`, installs under
+`/opt/xray-audit/releases/<version>`, atomically updates `/opt/xray-audit/current`, generates secrets,
+and runs a health check. It defaults to `memory`, disables Redis, and neither
+installs nor initializes SQL. See [installation architecture](docs/INSTALLATION_ARCHITECTURE.md),
+[updates](docs/UPDATE_ARCHITECTURE.md), [storage modes](docs/STORAGE_MODES.md),
+and [secure configuration](docs/SECURE_CONFIGURATION.md).
+
+Memory mode is process-local and bounded. Authentication, runtime settings, and
+encrypted storage connection settings persist in the local control database;
+audit events are discarded on restart until MySQL or D1 is activated.
 
 ## Quick Start (MySQL)
 
@@ -90,6 +111,11 @@ moving production data.
   - `GET /api/v1/config/current`
   - `PUT /api/v1/config/current`
   - `GET /api/v1/config/history`
+  - `GET /api/v1/storage/config`
+  - `PUT /api/v1/storage/config`
+  - `POST /api/v1/storage/test`
+  - `POST /api/v1/storage/activate`
+  - `GET /api/v1/storage/status`
 - Audit:
   - `GET /api/v1/events/recent`
   - `GET /api/v1/events/query`
@@ -107,12 +133,12 @@ moving production data.
 
 ## Docker + GHCR Deployment
 
-Primary release path is `ghcr.io/zcl19/xray-audit:<tag>`.
+Primary release path is `ghcr.io/hengji233/xray-audit:<tag>`.
 
 1) Clone and prepare env:
 
 ```bash
-git clone https://github.com/zcl19/xray-audit.git
+git clone https://github.com/hengji233/xray-audit.git
 cd xray-audit/docker
 cp ../.env.example .env
 ```
@@ -139,7 +165,7 @@ docker compose up -d
 
 5) Rollback:
 
-- Pin `XRAY_AUDIT_IMAGE=ghcr.io/zcl19/xray-audit:vX.Y.Z` in `docker/.env`
+- Pin `XRAY_AUDIT_IMAGE=ghcr.io/hengji233/xray-audit:vX.Y.Z` in `docker/.env`
 - Run `docker compose up -d`
 
 ## Database Migrations
@@ -177,6 +203,8 @@ D1 collectors at the same log file concurrently.
   - docs sensitivity gate
 - Release workflow: `.github/workflows/release.yml`
   - trigger on tag `v*`
+  - build frontend, then wheel and `SHA256SUMS`
+  - attach wheel/checksum release assets
   - multi-arch image publish to GHCR
   - GitHub Release creation
 
@@ -206,3 +234,12 @@ git commit -m "chore: bootstrap xray-audit from tools/xray_audit snapshot"
 See `docs/XRAY_LOG_COMPAT.md`.
 
 Compatibility is maintained using log fixtures and parser tests, not by shipping Xray source code.
+
+## Maintainer Recovery
+
+Start with [AI context](docs/AI_CONTEXT.md), then read the global/node memory
+and validate `docs/MEMORY_INDEX.json`. The persistent requirements are:
+independent Xray deployment, wheel+systemd distribution, default memory without
+SQL installation, one embedded-collector API, and atomic verified updates with
+rollback. The recovery protocol forbids recording real infrastructure
+addresses or credentials.

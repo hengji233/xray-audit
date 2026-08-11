@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import time
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,11 +29,8 @@ _RETRYABLE_OPERATIONS = {
     "admin_user_get",
     "admin_user_update_login_success",
     "collector_state",
-    "error_summary_payload",
-    "error_summary_stats",
     "geo_cache_get",
     "geo_cache_upsert",
-    "ingest_error_events",
     "ingest_events",
     "job_state_get",
     "job_state_set",
@@ -44,7 +39,6 @@ _RETRYABLE_OPERATIONS = {
     "migration_import",
     "migration_stats",
     "prune_old_events",
-    "query_error_events",
     "query_events",
     "recent_events",
     "runtime_config_all",
@@ -183,26 +177,17 @@ class D1Ingestor:
         )
 
     def ingest_events(self, events: List[ParsedEvent], node_id: str) -> Dict[str, int]:
+        access_events = [event for event in events if event.access is not None]
         counts = {"raw": 0, "access": 0, "dns": 0}
-        for start in range(0, len(events), self.batch_size):
-            batch = events[start : start + self.batch_size]
+        for start in range(0, len(access_events), self.batch_size):
+            batch = access_events[start : start + self.batch_size]
             payload = [self._event_payload(event) for event in batch]
             self._client.call("ingest_events", {"events": payload, "node_id": node_id})
-            counts["raw"] += len(batch)
-            counts["access"] += sum(event.access is not None for event in batch)
-            counts["dns"] += sum(event.dns is not None for event in batch)
+            counts["access"] += len(batch)
         return counts
 
     def ingest_error_events(self, events: List[ParsedErrorEvent], node_id: str) -> int:
-        inserted = 0
-        for start in range(0, len(events), self.batch_size):
-            batch = events[start : start + self.batch_size]
-            self._client.call(
-                "ingest_error_events",
-                {"events": [_serialize(asdict(event)) for event in batch], "node_id": node_id},
-            )
-            inserted += len(batch)
-        return inserted
+        return 0
 
     def prune_old_events(self, retention_days: int, delete_batch_size: int) -> int:
         if retention_days <= 0 or delete_batch_size <= 0:
@@ -220,13 +205,25 @@ class D1Ingestor:
 
     @staticmethod
     def _event_payload(event: ParsedEvent) -> Dict[str, Any]:
-        payload = _serialize(asdict(event))
-        if event.dns is not None:
-            try:
-                payload["dns"]["ips_json"] = json.loads(event.dns.ips_json)
-            except (TypeError, json.JSONDecodeError):
-                payload["dns"]["ips_json"] = event.dns.ips_json
-        return payload
+        access = event.access
+        if access is None:
+            raise ValueError("D1 access payload requires an access event")
+        protocol = access.dest_raw.split(":", 1)[0] if access.dest_raw.startswith(("tcp:", "udp:")) else ""
+        return {
+            "event_time": _iso_utc(access.event_time),
+            "event_hash": event.raw_hash,
+            "access": {
+                "user_email": access.user_email,
+                "src": access.src,
+                "dest_host": access.dest_host,
+                "dest_port": access.dest_port,
+                "protocol": protocol,
+                "status": access.status,
+                "detour": access.detour,
+                "reason": access.reason,
+                "is_domain": access.is_domain,
+            },
+        }
 
 
 class D1QueryService:
@@ -298,13 +295,13 @@ class D1QueryService:
         return dict(self._call("summary_stats", window_seconds=window_seconds))
 
     def query_error_events(self, dt_from: datetime, dt_to: datetime, level: Optional[str], category: Optional[str], include_noise: bool, keyword: Optional[str], page: int, page_size: int) -> Tuple[int, List[Dict[str, Any]]]:
-        return self._paged(self._call("query_error_events", **{"from": dt_from, "to": dt_to}, level=level, category=category, include_noise=include_noise, keyword=keyword, page=page, page_size=page_size))
+        return 0, []
 
     def error_summary_stats(self, window_seconds: int) -> Dict[str, Any]:
-        return dict(self._call("error_summary_stats", window_seconds=window_seconds))
+        return {"total": 0, "error_count": 0, "warning_count": 0, "info_count": 0, "noise_count": 0, "top_categories": []}
 
     def error_summary_payload(self, dt_from: datetime, dt_to: datetime, max_items: int) -> Dict[str, Any]:
-        return dict(self._call("error_summary_payload", **{"from": dt_from, "to": dt_to}, max_items=max_items))
+        return {"from": dt_from, "to": dt_to, "total": 0, "level_category": [], "top_signatures": [], "recent_examples": []}
 
     def job_state_get(self, key: str) -> Optional[str]:
         row = self._call("job_state_get", key=key)

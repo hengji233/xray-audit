@@ -76,10 +76,11 @@ class CollectorStats:
 
 
 class AuditCollector:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, ingestor: Any = None, query_service: Any = None) -> None:
         self.settings = settings
-        self.ingestor = create_ingestor(settings)
-        self.query_service = create_query_service(settings)
+        self._owns_ingestor = ingestor is None
+        self.ingestor = ingestor or create_ingestor(settings)
+        self.query_service = query_service or create_query_service(settings)
         self.runtime_config = RuntimeConfigManager(settings, self.query_service)
         self.redis_cache = RedisCache(settings)
         self.tailer = LogTailer(settings.log_path)
@@ -94,7 +95,8 @@ class AuditCollector:
         self.tailer.close()
         if self.error_tailer is not None:
             self.error_tailer.close()
-        self.ingestor.close()
+        if self._owns_ingestor:
+            self.ingestor.close()
 
     def stats_snapshot(self) -> Dict[str, Any]:
         with self._lock:
@@ -123,16 +125,17 @@ class AuditCollector:
                 self.redis_cache.update_from_events(batch)
 
         inode, offset = self.tailer.state()
-        self.ingestor.save_state(self.settings.log_path, inode, offset)
+        if batch:
+            self.ingestor.save_state(self.settings.log_path, inode, offset)
 
         error_written = 0
         error_inode: Optional[int] = None
         error_offset: int = 0
         if self.error_tailer is not None:
             error_inode, error_offset = self.error_tailer.state()
-            self.ingestor.save_state(self.settings.error_log_path, error_inode, error_offset)
             if error_batch:
                 error_written = self.ingestor.ingest_error_events(error_batch, node_id=self.settings.node_id)
+                self.ingestor.save_state(self.settings.error_log_path, error_inode, error_offset)
 
         with self._lock:
             self.stats.batches_flushed += 1
@@ -169,9 +172,18 @@ class AuditCollector:
 
         batch: List[ParsedEvent] = []
         error_batch: List[ParsedErrorEvent] = []
+        flush_failed = False
 
         while not self._stop_event.is_set():
             try:
+                if flush_failed:
+                    self._flush(batch, error_batch)
+                    batch = []
+                    error_batch = []
+                    last_flush = time.monotonic()
+                    flush_failed = False
+                    continue
+
                 batch_size = max(1, self.runtime_config.get_int("AUDIT_BATCH_SIZE", self.settings.batch_size))
                 flush_interval = max(
                     0.1,
@@ -223,6 +235,10 @@ class AuditCollector:
                                 self.stats.parse_fail_total += 1
                             continue
                         if should_drop_event(parsed, filter_settings):
+                            with self._lock:
+                                self.stats.filtered_total += 1
+                            continue
+                        if parsed.access is None:
                             with self._lock:
                                 self.stats.filtered_total += 1
                             continue
@@ -278,6 +294,13 @@ class AuditCollector:
                     error_batch = []
                     last_flush = now
 
+                if lines and not batch:
+                    inode, offset = self.tailer.state()
+                    self.ingestor.save_state(self.settings.log_path, inode, offset)
+                if error_lines and not error_batch and self.error_tailer is not None:
+                    err_inode, err_offset = self.error_tailer.state()
+                    self.ingestor.save_state(self.settings.error_log_path, err_inode, err_offset)
+
                 # Retention policy: keep only recent history.
                 retention_days = max(
                     1,
@@ -315,6 +338,7 @@ class AuditCollector:
                     self._publish_health()
                     time.sleep(poll_interval)
             except Exception as err:
+                flush_failed = bool(batch or error_batch)
                 with self._lock:
                     self.stats.db_write_fail_total += 1
                 self._set_error(err)
