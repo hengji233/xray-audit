@@ -250,3 +250,15 @@ def test_memory_storage_connection_test_is_available_without_sql() -> None:
     response = client.post("/api/v1/storage/test", json={"backend": "memory", "config": {}})
     assert response.status_code == 200
     assert response.json()["success"] is True
+
+
+def test_log_file_status_reports_readability(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "access.log"
+    assert api_module._log_file_status(str(path)) == "missing"
+    path.write_text("sample\n")
+    assert api_module._log_file_status(str(path)) == "readable"
+    assert api_module._log_file_status(str(path), False) == "disabled"
+    def denied(*args, **kwargs):
+        raise PermissionError("denied")
+    monkeypatch.setattr("builtins.open", denied)
+    assert api_module._log_file_status(str(path)) == "unreadable"

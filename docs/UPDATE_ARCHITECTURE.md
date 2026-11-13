@@ -15,6 +15,11 @@ The installer verifies remote artifacts, prepares the new release before
 changing `current`, preserves existing secrets, atomically switches the link,
 restarts systemd, and polls the health endpoint for up to 30 seconds.
 
+Existing configuration is preserved unless the corresponding command-line option
+is supplied. A release without its completion marker is rejected; inspect and
+remove an incomplete release directory before retrying. A failed switch restores
+the previous environment, systemd unit and release link and reloads systemd.
+
 ## Failure And Rollback
 On failed health, the installer stops the failed service and restores the
 previous symlink when one existed. It then attempts to restart the prior

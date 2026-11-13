@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+import stat
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -80,7 +81,7 @@ class ApiMetrics:
 
 api_metrics = ApiMetrics()
 
-app = FastAPI(title="Xray Audit API", version="0.2.0")
+app = FastAPI(title="Xray Audit API", version="0.2.2")
 
 _frontend_dist_dir = Path(__file__).resolve().parent / "frontend_dist"
 _dashboard_dir = Path(__file__).resolve().parent / "dashboard"
@@ -443,6 +444,20 @@ def root() -> FileResponse:
     return FileResponse(index_path)
 
 
+def _log_file_status(path: str, enabled: bool = True) -> str:
+    if not enabled:
+        return "disabled"
+    try:
+        if not stat.S_ISREG(Path(path).stat().st_mode):
+            return "unreadable"
+        with open(path, "rb"):
+            return "readable"
+    except FileNotFoundError:
+        return "missing"
+    except OSError:
+        return "unreadable"
+
+
 @app.get("/api/v1/health")
 def health(request: Request) -> Dict[str, Any]:
     if settings.auth_enabled and not settings.auth_allow_anonymous_health:
@@ -469,6 +484,10 @@ def health(request: Request) -> Dict[str, Any]:
         "data_lost_on_restart": storage_manager.active_settings.storage_backend == "memory",
         "log_path": settings.log_path,
         "error_log_path": settings.error_log_path,
+        "log_file_status": {
+            "access": _log_file_status(settings.log_path),
+            "error": _log_file_status(settings.error_log_path, settings.error_log_enabled),
+        },
         "db_state": state,
         "db_error_state": error_state,
         "storage_state": state,

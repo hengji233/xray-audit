@@ -43,6 +43,13 @@ The bootstrap password is shown once only on first installation. It must be
 rotated at first login. An operator using `--no-start` is responsible for the
 first start and health check.
 
+Updates preserve existing listener, data and log paths unless explicitly supplied.
+The installer checks log readability as the service user and warns when files are
+missing or inaccessible. The health response reports `log_file_status` as
+`readable`, `missing`, `unreadable`, or `disabled`; readability alone does not
+prove that records are being collected. Grant the service user read and directory
+traversal access without relaxing permissions for everyone.
+
 ## Packaging Contract
 The release workflow builds the frontend before the wheel. Runtime dependencies
 and `xray_audit/frontend_dist` package data are declared in `pyproject.toml`.

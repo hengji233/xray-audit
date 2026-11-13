@@ -156,6 +156,11 @@ cp ../.env.example .env
 docker compose up -d
 ```
 
+The Compose data volume persists the control database (users and settings).
+Existing containers using the old in-memory control database cannot migrate that
+state automatically. Memory-mode audit events remain ephemeral across restarts.
+Ensure the container user can traverse and read the mounted Xray log files.
+
 4) Upgrade:
 
 ```bash

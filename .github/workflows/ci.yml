@@ -25,6 +25,9 @@ jobs:
       - name: Run backend tests
         run: pytest -q
 
+      - name: Check installer syntax
+        run: bash -n scripts/install.sh
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

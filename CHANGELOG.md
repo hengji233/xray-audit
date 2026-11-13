@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-13
+
+### Fixed
+- Preserve installer settings and restore the systemd unit on failed updates.
+- Persist Docker control data and report log file accessibility.
+- Validate installed release artifacts and add installer and log compatibility tests.
+
 ## [0.2.1] - 2026-08-11
 
 ### Fixed

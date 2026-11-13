@@ -16,6 +16,7 @@ REPOSITORY=${XRAY_AUDIT_REPOSITORY:-hengji233/xray-audit}
 ENV_DIR=/etc/xray-audit
 ENV_FILE=$ENV_DIR/xray-audit.env
 UNIT_FILE=/etc/systemd/system/$SERVICE
+SET_INSTALL_ROOT=0 SET_DATA_DIR=0 SET_LISTEN_HOST=0 SET_LISTEN_PORT=0 SET_XRAY_LOG_DIR=0
 
 usage() {
   cat <<'EOF'
@@ -45,11 +46,11 @@ need_value() { [[ $# -ge 2 && -n ${2:-} ]] || die "$1 requires a value"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) need_value "$@"; VERSION=$2; shift 2 ;;
-    --install-root) need_value "$@"; INSTALL_ROOT=${2%/}; shift 2 ;;
-    --data-dir) need_value "$@"; DATA_DIR=${2%/}; shift 2 ;;
-    --listen-host) need_value "$@"; LISTEN_HOST=$2; shift 2 ;;
-    --listen-port) need_value "$@"; LISTEN_PORT=$2; shift 2 ;;
-    --xray-log-dir) need_value "$@"; XRAY_LOG_DIR=${2%/}; shift 2 ;;
+    --install-root) need_value "$@"; INSTALL_ROOT=${2%/}; SET_INSTALL_ROOT=1; shift 2 ;;
+    --data-dir) need_value "$@"; DATA_DIR=${2%/}; SET_DATA_DIR=1; shift 2 ;;
+    --listen-host) need_value "$@"; LISTEN_HOST=$2; SET_LISTEN_HOST=1; shift 2 ;;
+    --listen-port) need_value "$@"; LISTEN_PORT=$2; SET_LISTEN_PORT=1; shift 2 ;;
+    --xray-log-dir) need_value "$@"; XRAY_LOG_DIR=${2%/}; SET_XRAY_LOG_DIR=1; shift 2 ;;
     --no-start) START_SERVICE=0; shift ;;
     --unattended) UNATTENDED=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -57,13 +58,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Read existing values as data, never as shell code.
+if [[ $SET_INSTALL_ROOT -eq 0 && -f $UNIT_FILE ]]; then
+  old_working_dir=$(sed -n 's/^WorkingDirectory=\(.*\)\/current$/\1/p' "$UNIT_FILE" | head -n 1)
+  [[ -z $old_working_dir ]] || INSTALL_ROOT=$old_working_dir
+fi
+existing_value() { sed -n "s/^$1=//p" "$ENV_FILE" | head -n 1; }
+if [[ -f $ENV_FILE ]]; then
+  [[ $SET_DATA_DIR -eq 1 ]] || DATA_DIR=$(existing_value AUDIT_DATA_DIR)
+  [[ $SET_LISTEN_HOST -eq 1 ]] || LISTEN_HOST=$(existing_value AUDIT_API_HOST)
+  [[ $SET_LISTEN_PORT -eq 1 ]] || LISTEN_PORT=$(existing_value AUDIT_API_PORT)
+  if [[ $SET_XRAY_LOG_DIR -eq 0 ]]; then
+    old_access=$(existing_value AUDIT_LOG_PATH)
+    [[ $old_access == */access.log ]] && XRAY_LOG_DIR=${old_access%/access.log}
+  fi
+  DATA_DIR=${DATA_DIR:-/var/lib/xray-audit}
+  LISTEN_HOST=${LISTEN_HOST:-127.0.0.1}
+  LISTEN_PORT=${LISTEN_PORT:-8088}
+fi
+
 [[ $(id -u) -eq 0 ]] || die "run this installer as root"
 [[ $INSTALL_ROOT =~ ^/[A-Za-z0-9._/-]+$ && $INSTALL_ROOT != *'/../'* ]] || die "--install-root must be a simple absolute path"
 [[ $DATA_DIR =~ ^/[A-Za-z0-9._/-]+$ && $DATA_DIR != *'/../'* ]] || die "--data-dir must be a simple absolute path"
 [[ $XRAY_LOG_DIR =~ ^/[A-Za-z0-9._/-]+$ && $XRAY_LOG_DIR != *'/../'* ]] || die "--xray-log-dir must be a simple absolute path"
 [[ $LISTEN_HOST =~ ^[A-Za-z0-9:._-]+$ ]] || die "invalid listen host"
 [[ $LISTEN_PORT =~ ^[0-9]+$ ]] && (( LISTEN_PORT >= 1 && LISTEN_PORT <= 65535 )) || die "invalid listen port"
-[[ $VERSION =~ ^[A-Za-z0-9._+-]+$ ]] || die "invalid version"
+[[ $VERSION =~ ^[A-Za-z0-9._+-]+$ && $VERSION != *..* && $VERSION != . ]] || die "invalid version"
 [[ $REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "invalid XRAY_AUDIT_REPOSITORY"
 
 for command in curl python3 systemctl sha256sum; do
@@ -77,7 +97,36 @@ if [[ $UNATTENDED -eq 0 ]]; then
 fi
 
 TMP_DIR=$(mktemp -d)
-cleanup() { rm -rf "$TMP_DIR"; }
+TRANSACTION=0
+cleanup() {
+  local rc=$?
+  trap - EXIT
+  if [[ $rc -ne 0 && $TRANSACTION -eq 1 ]]; then
+    systemctl stop "$SERVICE" || printf 'warning: failed to stop service during rollback\n' >&2
+    if [[ -n $PREVIOUS_TARGET ]]; then
+      rm -f "$NEW_LINK"
+      ln -s "$PREVIOUS_TARGET" "$NEW_LINK" && mv -Tf "$NEW_LINK" "$CURRENT_LINK" || printf 'warning: failed to restore release link\n' >&2
+    else
+      rm -f "$CURRENT_LINK"
+    fi
+    if [[ $HAD_ENV -eq 1 ]]; then
+      install -m 0640 -o root -g "$SERVICE_USER" "$TMP_DIR/previous.env" "$ENV_FILE" || printf 'warning: failed to restore environment\n' >&2
+    else
+      rm -f "$ENV_FILE"
+    fi
+    if [[ $HAD_UNIT -eq 1 ]]; then
+      install -m 0644 "$TMP_DIR/previous.unit" "$UNIT_FILE" || printf 'warning: failed to restore systemd unit\n' >&2
+    else
+      rm -f "$UNIT_FILE"
+    fi
+    systemctl daemon-reload || printf 'warning: failed to reload systemd\n' >&2
+    if [[ -n $PREVIOUS_TARGET && $HAD_UNIT -eq 1 ]]; then
+      systemctl restart "$SERVICE" || printf 'warning: failed to restart previous release\n' >&2
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+  exit "$rc"
+}
 trap cleanup EXIT
 
 HAD_ENV=0
@@ -118,7 +167,7 @@ else
 fi
 
 VERSION=${VERSION#v}
-[[ $VERSION =~ ^[A-Za-z0-9._+-]+$ ]] || die "invalid resolved version"
+[[ $VERSION =~ ^[A-Za-z0-9._+-]+$ && $VERSION != *..* && $VERSION != . ]] || die "invalid resolved version"
 RELEASES_DIR=$INSTALL_ROOT/releases
 RELEASE_DIR=$RELEASES_DIR/$VERSION
 CURRENT_LINK=$INSTALL_ROOT/current
@@ -140,15 +189,20 @@ fi
 
 install -d -m 0755 "$INSTALL_ROOT" "$RELEASES_DIR"
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR"
-install -d -m 0750 "$ENV_DIR"
+install -d -o root -g "$SERVICE_USER" -m 0750 "$ENV_DIR"
 
-if [[ ! -d $RELEASE_DIR/venv ]]; then
+if [[ ! -f $RELEASE_DIR/.complete ]]; then
   [[ ! -e $RELEASE_DIR ]] || die "incomplete release directory already exists: $RELEASE_DIR"
   install -d -m 0755 "$RELEASE_DIR"
   python3 -m venv "$RELEASE_DIR/venv"
   "$RELEASE_DIR/venv/bin/python" -m pip install --disable-pip-version-check --upgrade pip
   "$RELEASE_DIR/venv/bin/python" -m pip install --disable-pip-version-check "$TMP_DIR/$WHEEL_NAME"
+  "$RELEASE_DIR/venv/bin/python" -c 'import importlib.metadata, sys; assert importlib.metadata.version("xray-audit") == sys.argv[1]' "$VERSION"
+  [[ -x $RELEASE_DIR/venv/bin/xray-audit-api ]] || die "missing API entrypoint"
+  touch "$RELEASE_DIR/.complete"
 fi
+"$RELEASE_DIR/venv/bin/python" -c 'import importlib.metadata, sys; assert importlib.metadata.version("xray-audit") == sys.argv[1]' "$VERSION" || die "invalid existing release"
+[[ -x $RELEASE_DIR/venv/bin/xray-audit-api ]] || die "missing API entrypoint"
 
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
@@ -181,12 +235,12 @@ if [[ $HAD_ENV -eq 1 ]]; then
   [[ -n $EXISTING_JWT ]] || set_env AUDIT_AUTH_JWT_SECRET "$JWT_SECRET"
   [[ -n $EXISTING_PASSWORD ]] || set_env AUDIT_ADMIN_BOOTSTRAP_PASSWORD "$ADMIN_PASSWORD"
   set_env AUDIT_DATA_DIR "$DATA_DIR"
-  set_env AUDIT_LOG_PATH "$XRAY_LOG_DIR/access.log"
-  set_env AUDIT_ERROR_LOG_PATH "$XRAY_LOG_DIR/error.log"
+  if [[ $SET_XRAY_LOG_DIR -eq 1 ]]; then
+    set_env AUDIT_LOG_PATH "$XRAY_LOG_DIR/access.log"
+    set_env AUDIT_ERROR_LOG_PATH "$XRAY_LOG_DIR/error.log"
+  fi
   set_env AUDIT_API_HOST "$LISTEN_HOST"
   set_env AUDIT_API_PORT "$LISTEN_PORT"
-  set_env AUDIT_COLLECTOR_EMBEDDED true
-  set_env AUDIT_AUTH_ALLOW_ANONYMOUS_HEALTH true
 else
   cat >"$ENV_TMP" <<EOF
 AUDIT_STORAGE_BACKEND=memory
@@ -205,9 +259,11 @@ AUDIT_ADMIN_BOOTSTRAP_USERNAME=admin
 AUDIT_ADMIN_BOOTSTRAP_PASSWORD=$ADMIN_PASSWORD
 EOF
 fi
-install -m 0640 -o root -g "$SERVICE_USER" "$ENV_TMP" "$ENV_FILE"
-
 UNIT_TMP=$TMP_DIR/$SERVICE
+HAD_UNIT=0
+if [[ -f $UNIT_FILE ]]; then HAD_UNIT=1; cp -p "$UNIT_FILE" "$TMP_DIR/previous.unit"; fi
+TRANSACTION=1
+install -m 0640 -o root -g "$SERVICE_USER" "$ENV_TMP" "$ENV_FILE"
 cat >"$UNIT_TMP" <<EOF
 [Unit]
 Description=Xray Audit API with embedded collector
@@ -257,18 +313,18 @@ if [[ $START_SERVICE -eq 1 ]]; then
     done
   fi
   if [[ $healthy -ne 1 ]]; then
-    systemctl stop "$SERVICE" || true
-    if [[ -n $PREVIOUS_TARGET ]]; then
-      ln -s "$PREVIOUS_TARGET" "$NEW_LINK"
-      mv -Tf "$NEW_LINK" "$CURRENT_LINK"
-      if [[ $HAD_ENV -eq 1 ]]; then
-        install -m 0640 -o root -g "$SERVICE_USER" "$TMP_DIR/previous.env" "$ENV_FILE"
-      fi
-      systemctl restart "$SERVICE" || true
-    fi
-    die "health check failed; previous current link was restored when available"
+    die "health check failed; attempting rollback"
   fi
 fi
+TRANSACTION=0
+
+for key in AUDIT_LOG_PATH AUDIT_ERROR_LOG_PATH; do
+  path=$(sed -n "s/^$key=//p" "$ENV_FILE" | head -n 1)
+  if [[ $key = AUDIT_ERROR_LOG_PATH && $(sed -n 's/^AUDIT_ERROR_LOG_ENABLED=//p' "$ENV_FILE" | head -n 1) = false ]]; then continue; fi
+  if [[ -z $path ]] || ! runuser -u "$SERVICE_USER" -- test -r "$path"; then
+    printf 'warning: %s is missing or unreadable by %s: %s\n' "$key" "$SERVICE_USER" "$path" >&2
+  fi
+done
 
 log "Installed Xray Audit $VERSION"
 log "Environment: $ENV_FILE"

@@ -27,7 +27,8 @@ COPY docker /app/docker
 COPY --from=web_builder /build/xray_audit/frontend_dist /app/xray_audit/frontend_dist
 
 RUN chmod +x /app/docker/entrypoint.sh && \
-    chown -R app:app /app
+    mkdir -p /var/lib/xray-audit && \
+    chown -R app:app /app /var/lib/xray-audit
 
 USER app
 ENTRYPOINT ["/app/docker/entrypoint.sh"]

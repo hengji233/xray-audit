@@ -8,6 +8,7 @@ services:
       - .env
     environment:
       AUDIT_API_HOST: 0.0.0.0
+      AUDIT_DATA_DIR: /var/lib/xray-audit
       AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/logs/xray/access.log}
       AUDIT_ERROR_LOG_PATH: ${AUDIT_ERROR_LOG_PATH:-/logs/xray/error.log}
       AUDIT_COLLECTOR_EMBEDDED: ${AUDIT_COLLECTOR_EMBEDDED:-true}
@@ -16,6 +17,7 @@ services:
       - "127.0.0.1:${AUDIT_API_PORT:-8088}:${AUDIT_API_PORT:-8088}"
     volumes:
       - ${AUDIT_HOST_XRAY_LOG_DIR:-/usr/local/x-ui}:/logs/xray:ro
+      - audit_data:/var/lib/xray-audit
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import os,socket; s=socket.create_connection(('127.0.0.1', int(os.environ.get('AUDIT_API_PORT','8088'))), 2); s.close()\""]
       interval: 20s
@@ -30,12 +32,14 @@ services:
     env_file:
       - .env
     environment:
+      AUDIT_DATA_DIR: /var/lib/xray-audit
       AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/logs/xray/access.log}
       AUDIT_ERROR_LOG_PATH: ${AUDIT_ERROR_LOG_PATH:-/logs/xray/error.log}
       AUDIT_COLLECTOR_EMBEDDED: "false"
     command: ["python", "-m", "xray_audit.collector_runner"]
     volumes:
       - ${AUDIT_HOST_XRAY_LOG_DIR:-/usr/local/x-ui}:/logs/xray:ro
+      - audit_data:/var/lib/xray-audit
     healthcheck:
       test: ["CMD", "python", "/app/docker/collector_healthcheck.py"]
       interval: 30s
@@ -50,3 +54,6 @@ services:
     env_file:
       - .env
     command: ["python", "-m", "xray_audit.ai_summary"]
+
+volumes:
+  audit_data:
